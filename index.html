@@ -921,7 +921,10 @@ window.ANSWERS = [
   var local = null;
   var SKEY = null;
   var ANSWER = null;
-  var DOCUMENT = null;
+  var DOCUMENT = null;       // human-readable label used in info messages + summary
+  var DOC_FIELD = null;      // what we send as `document` to webxdc — kept terse since
+                             // the host displays "{DOC_FIELD} – {manifest.name}", so
+                             // including the app name here would just duplicate it.
   var current = "";           // letters typed into the active row (only while !done)
 
   // realtime presence
@@ -947,7 +950,8 @@ window.ANSWERS = [
     if (word.length !== COLS) return;
     challenge = { id: c.id, word: word, by: c.by, ts: c.ts || 0 };
     ANSWER = challenge.word;
-    DOCUMENT = APP_NAME + " #" + challenge.id;
+    DOCUMENT  = APP_NAME + " #" + challenge.id;
+    DOC_FIELD = "#" + challenge.id;
     startGame();
   }
 
@@ -974,7 +978,7 @@ window.ANSWERS = [
     metaSent = true;
     webxdc.sendUpdate({
       payload: { type: "meta", id: challenge.id },
-      document: DOCUMENT,
+      document: DOC_FIELD,
       summary: summaryText()
     }, DOCUMENT);
   }
@@ -1284,19 +1288,28 @@ window.ANSWERS = [
     var firstOnBoard = Object.keys(results).length === 1;
     var leadTake = imLeader && !firstOnBoard;
 
+    // Always post an info message in the chat when someone finishes (so the
+    // group sees activity). Reserve `notify` (the push notification) for the
+    // case where they actually took the lead — that's the noteworthy event.
+    var resultText = me.won
+      ? "📊 " + me.name + " solved " + DOCUMENT + " in " + me.tries + "/" + ROWS + " — " + fmtTime(me.time)
+      : "📊 " + me.name + " couldn't solve " + DOCUMENT + " (X/" + ROWS + ")";
+
     var update = {
       payload: {
         type: "result", id: challenge.id, addr: webxdc.selfAddr,
         name: me.name, tries: me.tries, time: me.time, won: me.won, ts: me.ts, pattern: pattern
       },
-      document: DOCUMENT,
+      info: resultText,
+      document: DOC_FIELD,
       summary: summaryText()
     };
-    var descr = DOCUMENT + " · " + (me.won ? (me.tries + "/" + ROWS) : "X/" + ROWS);
+    var descr = resultText;
+
     if (leadTake) {
       var leadText = "🏆 " + me.name + " is now leading " + DOCUMENT
         + " — " + me.tries + "/" + ROWS + " in " + fmtTime(me.time);
-      update.info = leadText;
+      update.info = leadText;         // upgrade the chat line to the more interesting one
       update.notify = { "*": leadText };
       descr = leadText;
     }
