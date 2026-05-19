@@ -1051,12 +1051,56 @@ window.ANSWERS = [
     return m + ":" + (s < 10 ? "0" : "") + s;
   }
   function elapsed() {
+    if (local && local.fromSync) return local.syncTime || 0;
     if (!local || !local.startedAt) return 0;
     return Math.max(0, (local.endedAt || Date.now()) - local.startedAt);
   }
 
+  // Completion state lives in localStorage (per-device). If we open this puzzle
+  // on a second device, the leaderboard syncs but the board doesn't — so rebuild
+  // a finished view from our own synced result instead of letting us replay it.
+  // We don't have the original guessed words (and must not broadcast them — the
+  // winning guess is the answer), so we show the colour pattern only.
+  function adoptSyncedResult(r) {
+    if (!local || local.done || !r) return;
+    local.done = true;
+    local.won = !!r.won;
+    local.fromSync = true;
+    local.syncTries = r.tries;
+    local.syncTime = r.time;
+    local.syncPattern = Array.isArray(r.pattern) ? r.pattern : [];
+    local.broadcast = true;          // already on the board; never re-send
+    current = "";
+    saveLocal();
+    if (gameReady) renderAll();
+  }
+
   function renderBoard() {
     if (!gameReady) return;
+
+    // Finished-on-another-device view: colour the pattern, no letters (we don't
+    // have them). A win's last row IS the answer, so fill that one in.
+    if (local.fromSync) {
+      var pat = local.syncPattern || [];
+      var answerRow = local.won ? pat.length - 1 : -1;
+      for (var fr = 0; fr < ROWS; fr++) {
+        rowEls[fr].classList.remove("shake");
+        var prow = pat[fr];
+        for (var fc = 0; fc < COLS; fc++) {
+          var ft = tiles[fr][fc];
+          ft.className = "tile";
+          if (prow) {
+            var code = prow.charAt(fc);
+            ft.classList.add("filled", code === "C" ? "correct" : code === "P" ? "present" : "absent");
+            ft.textContent = (fr === answerRow && ANSWER) ? ANSWER.charAt(fc) : "";
+          } else {
+            ft.textContent = "";
+          }
+        }
+      }
+      return;
+    }
+
     var activeRow = local.guesses.length;
     for (var r = 0; r < ROWS; r++) {
       rowEls[r].classList.remove("shake");
@@ -1107,12 +1151,14 @@ window.ANSWERS = [
     if (local.done) {
       $kb.classList.add("hidden");
       $banner.classList.remove("hidden");
+      var elsewhere = local.fromSync ? " &middot; <em>finished on another device</em>" : "";
       if (local.won) {
+        var nTries = local.fromSync ? local.syncTries : local.guesses.length;
         $banner.className = "banner win";
-        $banner.innerHTML = "<strong>Solved in " + local.guesses.length + "/" + ROWS + "</strong> &middot; " + fmtTime(elapsed());
+        $banner.innerHTML = "<strong>Solved in " + nTries + "/" + ROWS + "</strong> &middot; " + fmtTime(elapsed()) + elsewhere;
       } else {
         $banner.className = "banner lose";
-        $banner.innerHTML = "<strong>Out of guesses.</strong> The word was <strong>" + ANSWER + "</strong>.";
+        $banner.innerHTML = "<strong>Out of guesses.</strong> The word was <strong>" + ANSWER + "</strong>." + elsewhere;
       }
     } else {
       $kb.classList.remove("hidden");
@@ -1262,7 +1308,10 @@ window.ANSWERS = [
           name: p.name, tries: p.tries, time: p.time, won: !!p.won, ts: p.ts || 0,
           pattern: Array.isArray(p.pattern) ? p.pattern : []
         };
-        if (p.addr === webxdc.selfAddr && local) { local.broadcast = true; saveLocal(); }
+        if (p.addr === webxdc.selfAddr && local) {
+          local.broadcast = true; saveLocal();
+          if (!local.done) adoptSyncedResult(results[p.addr]);  // finished on another device
+        }
       }
     }
   }
@@ -1377,7 +1426,11 @@ window.ANSWERS = [
     if (!challenge) {
       rollNewChallenge();           // nobody has set the puzzle yet — we do
     } else {
-      if (local && local.done && !local.broadcast && !results[webxdc.selfAddr]) broadcastResult();
+      if (local && !local.done && results[webxdc.selfAddr]) {
+        adoptSyncedResult(results[webxdc.selfAddr]);            // finished on another device
+      } else if (local && local.done && !local.broadcast && !results[webxdc.selfAddr]) {
+        broadcastResult();                                      // finished offline, never sent
+      }
       maybeSendMeta();
     }
   });
