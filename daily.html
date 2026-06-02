@@ -1,0 +1,1992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Daily Word</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1b;
+  --muted: #787c7e;
+  --line: #d3d6da;
+  --tile-line: #d3d6da;
+  --key-bg: #d3d6da;
+  --key-fg: #1a1a1b;
+  --correct: #6aaa64;
+  --present: #c9b458;
+  --absent: #787c7e;
+  --banner-bg: #f4f4f5;
+  --me-bg: #eef6ff;
+  --accent: #538d4e;
+  --live: #2cb67d;
+  --gold: #c9a227;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121213;
+    --fg: #d7dadc;
+    --muted: #818384;
+    --line: #3a3a3c;
+    --tile-line: #3a3a3c;
+    --key-bg: #818384;
+    --key-fg: #ffffff;
+    --correct: #538d4e;
+    --present: #b59f3b;
+    --absent: #3a3a3c;
+    --banner-bg: #1f1f21;
+    --me-bg: #1d2a36;
+    --accent: #6aaa64;
+    --live: #3ddc97;
+    --gold: #d8b13c;
+  }
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  display: flex;
+  justify-content: center;
+}
+#app {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 0 8px env(safe-area-inset-bottom) 8px;
+}
+
+/* ---- top bar ---- */
+#topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 4px 6px;
+}
+.title { font-weight: 800; font-size: 18px; letter-spacing: 1px; }
+#game-name { text-transform: uppercase; }
+#challenge-no { color: var(--muted); font-weight: 700; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.timer {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 16px;
+  color: var(--muted);
+  min-width: 48px;
+  text-align: right;
+}
+.timer.running { color: var(--accent); }
+
+/* ---- day navigation ---- */
+.daynav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 4px 2px;
+}
+.navbtn {
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 700;
+  padding: 2px 10px;
+  cursor: pointer;
+  border-radius: 6px;
+  font-family: inherit;
+}
+.navbtn:disabled { color: var(--line); cursor: default; }
+.navbtn:not(:disabled):active { background: var(--banner-bg); }
+.day-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 150px;
+  text-align: center;
+}
+.day-label .today-tag { color: var(--accent); }
+
+/* ---- main / board ---- */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 10px 0;
+}
+.board { display: grid; grid-template-rows: repeat(6, 1fr); gap: 5px; }
+.row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+.tile {
+  width: 56px;
+  height: 56px;
+  border: 2px solid var(--tile-line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  text-transform: uppercase;
+  user-select: none;
+  color: var(--fg);
+  background: transparent;
+}
+@media (max-height: 700px) { .tile { width: 48px; height: 48px; font-size: 24px; } }
+@media (max-width: 340px) { .tile { width: 48px; height: 48px; font-size: 24px; } }
+.tile.filled { border-color: var(--muted); }
+.tile.active { border-color: var(--fg); animation: pop 0.08s ease-in-out; }
+.tile.correct { background: var(--correct); border-color: var(--correct); color: #fff; }
+.tile.present { background: var(--present); border-color: var(--present); color: #fff; }
+.tile.absent  { background: var(--absent);  border-color: var(--absent);  color: #fff; }
+@keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+.row.shake { animation: shake 0.5s; }
+@keyframes shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+
+/* ---- toast ---- */
+.toast {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--fg);
+  color: var(--bg);
+  padding: 9px 14px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 14px;
+  z-index: 10;
+  pointer-events: none;
+  max-width: 90%;
+  text-align: center;
+}
+
+/* ---- banner ---- */
+.banner {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--banner-bg);
+  font-size: 15px;
+  text-align: center;
+}
+.banner strong { font-weight: 800; }
+.banner.win { background: var(--banner-bg); border: 1px solid var(--correct); }
+.banner.lose { background: var(--banner-bg); border: 1px solid var(--line); }
+.banner.info { background: var(--banner-bg); border: 1px solid var(--line); color: var(--muted); }
+
+/* ---- keyboard ---- */
+.keyboard { display: flex; flex-direction: column; gap: 6px; padding: 8px 0 4px; }
+.kb-row { display: flex; gap: 5px; justify-content: center; }
+.kb-spacer { flex: 0.5; }
+.key {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--key-bg);
+  color: var(--key-fg);
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+  font-family: inherit;
+}
+.key:active { filter: brightness(0.9); }
+.key-wide { flex: 1.6; font-size: 11px; }
+.key.correct { background: var(--correct); color: #fff; }
+.key.present { background: var(--present); color: #fff; }
+.key.absent  { background: var(--absent);  color: #fff; }
+
+/* ---- presence (live now) ---- */
+.presence {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.presence .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--live);
+  flex: 0 0 8px;
+  box-shadow: 0 0 0 0 var(--live);
+  animation: pulse 1.8s ease-out infinite;
+}
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(44, 182, 125, 0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(44, 182, 125, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(44, 182, 125, 0); }
+}
+
+/* ---- tabs ---- */
+.tabs {
+  display: flex;
+  margin-top: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.tab {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 10px 6px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+.tab.active { color: var(--fg); border-bottom-color: var(--accent); }
+
+/* ---- leaderboard ---- */
+.leaderboard { padding: 12px 4px 16px; }
+.lb-title { margin: 0 0 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+.lb-count { color: var(--muted); }
+.lb-list { list-style: none; margin: 0; padding: 0; }
+.lb-item {
+  padding: 7px 8px;
+  border-radius: 6px;
+  font-size: 15px;
+}
+.lb-item + .lb-item { margin-top: 3px; }
+.lb-item.me { background: var(--me-bg); }
+.lb-item.lost { opacity: 0.6; }
+.lb-main {
+  display: grid;
+  grid-template-columns: 26px 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.lb-rank { text-align: center; font-weight: 700; }
+.lb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.lb-tries { font-weight: 800; font-variant-numeric: tabular-nums; }
+.lb-time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; text-align: right; }
+.lb-grid { padding-left: 34px; margin-top: 5px; display: flex; flex-direction: column; gap: 1.5px; }
+.lb-grow { display: flex; gap: 1.5px; }
+.lb-gs { width: 9px; height: 9px; border-radius: 1px; background: var(--absent); }
+.lb-gs.C { background: var(--correct); }
+.lb-gs.P { background: var(--present); }
+.lb-gs.A { background: var(--absent); }
+.lb-empty { color: var(--muted); font-size: 14px; margin: 4px 8px; }
+
+/* ---- overall standings (aligned table) ---- */
+.ov-head, .ov-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 42px 36px 30px 30px 40px;
+  align-items: center;
+  column-gap: 6px;
+}
+.ov-head {
+  padding: 0 8px 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+}
+.ov-row {
+  padding: 8px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.ov-row + .ov-row { margin-top: 2px; }
+.ov-row.me { background: var(--me-bg); }
+.ov-rank { text-align: center; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ov-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ov-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.ov-pts { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--fg); }
+.ov-note { color: var(--muted); font-size: 12px; margin: 12px 8px 0; line-height: 1.5; }
+
+/* ---- loading / waiting ---- */
+.waiting {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 15px;
+}
+.spinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* loading: hide everything but the spinner */
+body.loading #main,
+body.loading #keyboard,
+body.loading #leaderboard,
+body.loading #overall,
+body.loading #presence,
+body.loading #daynav,
+body.loading #tabs,
+body.loading #timer { display: none !important; }
+body:not(.loading) #waiting { display: none !important; }
+
+/* overall tab: hide the day-by-day play UI */
+body.tab-overall #main,
+body.tab-overall #keyboard,
+body.tab-overall #presence,
+body.tab-overall #daynav,
+body.tab-overall #leaderboard { display: none !important; }
+body:not(.tab-overall) #overall { display: none !important; }
+
+/* ---- first-run setup (timezone picker) ---- */
+.setup {
+  flex: 1;
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 14px;
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 16px 8px;
+}
+.setup-title { font-weight: 800; font-size: 20px; letter-spacing: 1px; text-transform: uppercase; text-align: center; margin: 0; }
+.setup-lead { color: var(--muted); font-size: 14px; line-height: 1.5; text-align: center; margin: 0; }
+.setup-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+#tz-select { font-family: inherit; font-size: 16px; font-weight: 600; padding: 11px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+.tz-preview { font-size: 13px; color: var(--accent); text-align: center; margin: 0; min-height: 18px; }
+.setup-btn { border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-family: inherit; font-size: 16px; font-weight: 800; padding: 13px; cursor: pointer; }
+.setup-btn:disabled { opacity: .6; cursor: default; }
+.setup-note { font-size: 12px; color: var(--muted); text-align: center; margin: 0; line-height: 1.5; }
+
+body.setup-mode #main,
+body.setup-mode #keyboard,
+body.setup-mode #leaderboard,
+body.setup-mode #overall,
+body.setup-mode #presence,
+body.setup-mode #daynav,
+body.setup-mode #tabs,
+body.setup-mode #timer,
+body.setup-mode #waiting { display: none !important; }
+body.setup-mode #setup { display: flex !important; }
+
+.hidden { display: none !important; }
+</style>
+</head>
+<body class="loading">
+<div id="app">
+  <header id="topbar">
+    <div class="title">
+      <span id="game-name">Daily Word</span><span id="challenge-no"></span>
+    </div>
+    <div id="timer" class="timer">0:00</div>
+  </header>
+
+  <div id="daynav" class="daynav">
+    <button id="day-prev" class="navbtn" type="button" aria-label="Previous day">&lsaquo;</button>
+    <span id="day-label" class="day-label"></span>
+    <button id="day-next" class="navbtn" type="button" aria-label="Next day">&rsaquo;</button>
+  </div>
+
+  <div id="waiting" class="waiting">
+    <div class="spinner"></div>
+    <p>Loading today's word…</p>
+  </div>
+
+  <div id="setup" class="setup">
+    <h2 class="setup-title">Daily Word</h2>
+    <p class="setup-lead">You're the first to open this. Pick when the puzzle resets each day — everyone in the chat will follow your choice.</p>
+    <label class="setup-field">
+      <span>Reset at midnight in</span>
+      <select id="tz-select"></select>
+    </label>
+    <p id="tz-preview" class="tz-preview"></p>
+    <button id="tz-start" class="setup-btn" type="button">Start the daily</button>
+    <p class="setup-note">This locks once set, so the leaderboards stay consistent for the whole group.</p>
+  </div>
+
+  <main id="main">
+    <div id="board" class="board" aria-label="Guesses"></div>
+    <div id="toast" class="toast hidden"></div>
+    <div id="banner" class="banner hidden"></div>
+  </main>
+
+  <section id="keyboard" class="keyboard" aria-label="Keyboard"></section>
+
+  <div id="presence" class="presence hidden">
+    <span class="dot"></span><span id="presence-text"></span>
+  </div>
+
+  <nav id="tabs" class="tabs">
+    <button id="tab-today" class="tab active" type="button" data-tab="today">Daily</button>
+    <button id="tab-overall" class="tab" type="button" data-tab="overall">Overall</button>
+  </nav>
+
+  <section id="leaderboard" class="leaderboard">
+    <h2 class="lb-title"><span id="lb-title-text">Leaderboard</span> <span id="lb-count" class="lb-count"></span></h2>
+    <ol id="lb-list" class="lb-list"></ol>
+    <p id="lb-empty" class="lb-empty">No one has finished yet — be the first.</p>
+  </section>
+
+  <section id="overall" class="leaderboard">
+    <h2 class="lb-title">Overall standings</h2>
+    <div id="ov-head" class="ov-head hidden">
+      <span class="ov-rank">#</span>
+      <span class="ov-name">Player</span>
+      <span class="ov-num">Solved</span>
+      <span class="ov-num">Avg</span>
+      <span class="ov-num">🏆</span>
+      <span class="ov-num">🔥</span>
+      <span class="ov-num">Pts</span>
+    </div>
+    <ol id="ov-list" class="lb-list"></ol>
+    <p id="ov-empty" class="lb-empty">No games finished yet.</p>
+    <p id="tz-info" class="ov-note"></p>
+    <p class="ov-note">
+      Each solved puzzle scores <strong>7&nbsp;&minus;&nbsp;guesses</strong> points
+      (1 guess = 6&nbsp;pts … 6 guesses = 1&nbsp;pt). 🏆 = days you topped the daily
+      board. 🔥 = current solve streak.
+    </p>
+  </section>
+</div>
+
+<script src="webxdc.js"></script>
+
+<script>
+window.ANSWERS = [
+  "which","their","would","there","could","about","other","these","first","years",
+  "those","being","three","still","going","after","might","world","again","think",
+  "never","under","while","local","small","great","quite","every","women","place",
+  "house","often","money","night","given","point","thing","taken","large","water",
+  "state","right","power","young","later","until","doing","where","today","times",
+  "since","voice","words","using","child","court","began","areas","major","woman",
+  "among","known","staff","third","seems","found","sense","level","shall","table",
+  "death","whose","clear","range","black","order","study","hours","white","hands",
+  "trade","cases","class","early","asked","value","seven","paper","eight","terms",
+  "price","stage","based","whole","makes","comes","weeks","shown","month","music",
+  "issue","royal","basis","heart","story","means","field","short","legal","books",
+  "final","wrong","human","above","space","leave","prime","model","takes","bring",
+  "happy","parts","floor","rates","sorry","ideas","thank","lower","basic","aware",
+  "style","round","maybe","gives","event","stood","sales","lines","goods","blood",
+  "rules","wrote","force","miles","glass","ready","costs","girls","title","start",
+  "plans","mouth","piece","heavy","needs","worth","hotel","looks","total","older",
+  "heard","fully","peace","types","radio","forms","civil","sound","allow","wants",
+  "light","below","fifty","knows","extra","works","along","trees","north","truth",
+  "board","media","close","south","horse","chair","cells","firms","built","image",
+  "award","names","scale","plant","stock","views","share","lives","river","drawn",
+  "speak","tried","carry","visit","units","write","shows","spoke","stone","cause",
+  "fresh","scene","speed","banks","items","avoid","crime","forty","added","steps",
+  "phone","users","offer","trial","sight","earth","sides","ahead","usual","rural",
+  "worse","twice","equal","stuff","funds","learn","games","joint","smile","stand",
+  "ought","homes","walls","pound","train","claim","match","video","sites","track",
+  "notes","apply","rooms","birds","build","shape","empty","upper","urban","quiet",
+  "reach","facts","route","shook","spend","front","faith","entry","birth","prove",
+  "vital","heads","moved","irish","shops","owner","lunch","broke","spent","wider",
+  "broad","raise","begin","doubt","doors","hence","teeth","goals","tests","kinds",
+  "least","phase","metal","agree","brain","worst","signs","chief","brief","break",
+  "funny","noise","inner","cover","seats","lying","green","drugs","drink","motor",
+  "youth","sixty","agent","badly","quick","sport","pages","minor","alive","begun",
+  "yours","angry","sheet","trust","tears","grass","shock","fruit","crown","clean",
+  "watch","lucky","worry","towns","index","teams","brown","enjoy","cards","stars",
+  "touch","guide","judge","talks","error","chest","theme","clubs","meant","coast",
+  "bread","roads","wages","panel","tasks","dress","tells","yards","grown","lived",
+  "shoes","drove","aside","chain","dream","fifth","drive","sharp","block","enter",
+  "hello","serve","apart","tired","store","focus","plane","occur","fault","rapid",
+  "scope","taste","queen","daily","liked","catch","films","welsh","rough","check",
+  "solid","feels","sugar","plate","truly","drama","sleep","thick","tools","fight",
+  "sweet","bound","noted","exist","frame","fewer","proud","skill","threw","limit",
+  "armed","sheep","prize","beach","pilot","depth","faces","alone","grand","ideal",
+  "moral","tough","waste","sorts","reply","admit","awful","grant","songs","anger",
+  "ratio","input","chose","abuse","nurse","silly","bills","finds","minds","clock",
+  "cheap","roles","false","argue","dozen","newly","roman","loans","taxes","loved",
+  "rocks","knife","proof","dirty","fixed","cycle","buyer","cried","unity","ships",
+  "waves","hoped","votes","pitch","shirt","wheel","knees","holes","keeps","sixth",
+  "flesh","dance","steel","score","smoke","trend","boxes","pride","layer","smell",
+  "boots","outer","topic","tends","coach","angle","links","hills","meals","blind",
+  "roots","draft","wings","texts","marks","holds","marry","logic","acute","guest",
+  "valid","bands","rugby","faced","bones","squad","turns","fears","calls","dealt",
+  "males","exact","lists","teach","helps","habit","treat","novel","pairs","album",
+  "dates","shift","delay","opera","pupil","tower","likes","gross","files","throw",
+  "foods","genes","naked","adult","mummy","risks","posts","apple","cross","storm",
+  "diary","curve","hopes","refer","boats","cream","steam","plays","bible","sheer",
+  "paint","piano","cloth","wives","adopt","leads","actor","tight","gates","uncle",
+  "lease","named","sadly","print","cloud","flats","blame","saved","spare","fails",
+  "bonds","dutch","greek","alarm","arise","guard","mouse","shame","grain","asian",
+  "movie","nasty","audit","shots","cheek","shell","lands","crash","mixed","sizes",
+  "edges","solve","crazy","chips","brick","farms","risen","opens","loose","stick",
+  "lover","reign","debts","panic","bench","asset","eaten","fence","chaos","tries",
+  "press","glory","daddy","poems","craft","laugh","essay","acres","guilt","grade",
+  "arose","debut","label","widow","brave","ranks","harsh","fibre","woods","seeks",
+  "vague","super","naval","clerk","stake","chart","count","balls","smart","virus",
+  "alter","liver","steep","buses","winds","rigid","shore","races","drank","eager",
+  "ended","stuck","mines","waist","ocean","faint","gifts","bases","cable","swiss",
+  "meets","cruel","hated","minus","suite","grace","kings","verse","plain","dying",
+  "grief","loads","canal","sword","paths","patch","coins","fatal","trick","lorry",
+  "bonus","forum","organ","owned","urged","blank","beans","loyal","grows","nerve",
+  "roses","bloke","brass","mayor","forth","shelf","guess","solar","backs","fraud",
+  "slope","seeds","crude","juice","noble","poles","spell","modes","ozone","bowel",
+  "jeans","pause","waved","skirt","shade","theft","ghost","brush","bunch","straw",
+  "moves","strip","spots","tapes","truck","corps","serum","toxic","penny","blown",
+  "width","fires","charm","twins","tenth","loves","tales","aimed","array","breed",
+  "brand","gains","ports","medal","slept","climb","falls","borne","devil","crops",
+  "rally","flown","venue","elbow","tiles","alike","pains","giant","blues","wound",
+  "weird","pools","voted","ruled","scots","cabin","lakes","lemon","polls","bombs",
+  "wines","relax","salad","trace","tanks","thumb","photo","wrist","crews","awake",
+  "heels","tutor","flood","flour","yacht","crack","vivid","imply","arrow","angel",
+  "ridge","sauce","noisy","graph","acids","realm","swing","aloud","yield","sunny",
+  "magic","mercy","ulcer","prior","reads","upset","basin","wheat","cakes","camps",
+  "march","skull","lobby","usage","lanes","abbey","draws","cliff","ninth","linen",
+  "bride","rival","eagle","shoot","trail","jokes","scent","holly","irony","sweat",
+  "laser","poets","dairy","exile","blade","acted","gazed","dense","react","walks",
+  "stole","agony","deals","limbs","fetch","split","handy","mills","elder","chalk",
+  "clash","rings","villa","maker","flame","metre","bitch","rider","shake","bacon",
+  "ruler","toast","altar","bleak","shaft","bells","towel","choir","lungs","hurry",
+  "slave","stops","pipes","tones","pulse","fever","atoms","fluid","spine","codes",
+  "beard","rolls","hedge","knock","belly","boost","torch","clues","loses","manor",
+  "telly","zones","tense","bored","swung","ankle","stiff","ivory","honey","papal",
+  "slice","ample","ferry","socks","adapt","dated","quota","nails","gloom","petty",
+  "quest","safer","rebel","fairy","prone","urine","arena","cargo","queue","souls",
+  "stamp","coats","gases","veins","grasp","norms","slide","blast","onset","tyres",
+  "merit","colon","peaks","batch","creed","swift","naive","bears","drunk","stays",
+  "beast","lions","disco","vicar","punch","locks","parks","cease","shiny","grave",
+  "pence","probe","fired","discs","herbs","valve","trips","stool","tribe","prose",
+  "china","siege","oddly","dusty","party","halls","wiped","rifle","weary","soils",
+  "tubes","decay","penal","swept","thief","drift","libel","wears","surge","depot",
+  "disks","sexes","feast","roofs","sells","vocal","civic","steal","wards","alert",
+  "audio","spray","midst","raids","burnt","burst","sandy","thigh","trunk","alien",
+  "onion","shout","cared","monks","stall","spoon","cloak","peers","suits","sends",
+  "flash","exams","fines","joins","lacks","risky","ruins","crust","drums","skies",
+  "drill","skins","muddy","fists","tooth","nylon","purse","riots","baths","czech",
+  "flock","polar","ducks","tours","deeds","odour","rents","frost","lords","rails",
+  "doses","stove","twist","fancy","flies","hobby","rocky","mould","radar","genre",
+  "verge","witch","elite","orbit","scrap","amino","donor","piles","quote","overt",
+  "sober","pills","cries","bulbs","dried","ropes","salon","hairs","horns","snake",
+  "algae","moist","crest","flows","frail","idiot","mates","saves","bowed","chord",
+  "downs","motif","bolts","cited","knots","attic","myths","saint","overs","fuels",
+  "madam","drops","tiger","pulls","wires","porch","pasta","drain","repay","sworn",
+  "blaze","swore","tract","slate","curls","duchy","islam","stack","dared","penis",
+  "arabs","chase","jelly","focal","gauge","comic","brisk","stark","eased","utter",
+  "docks","finer","litre","pints","worms","picks","ditch","chill","posed","mount",
+  "newer","cares","fiver","undue","kills","merry","fiery","stare","freed","tails",
+  "icing","slump","apron","folly","woken","beads","carer","crept","stems","cough",
+  "globe","sweep","gangs","meter","turks","lambs","puppy","seize","blend","renal",
+  "rises","niece","alley","deter","hired","wagon","hosts","verbs","hears","bless",
+  "greet","glare","palms","weeds","lamps","shaky","scarf","aisle","maths","nanny",
+  "satin","beers","couch","knelt","bowls","froze","frown","raced","whale","plump",
+  "lined","assay","cocoa","menus","frogs","rotor","bland","nazis","ponds","haven",
+  "tidal","ethos","windy","cigar","fills","hurts","bikes","cuban","jolly","cubic",
+  "hints","noses","seals","chess","plots","brake","cater","niche","warns","blunt",
+  "flora","pears","reins","beams","pants","nests","tummy","hindu","spoil","renew",
+  "badge","witty","frank","olive","query","stout","curly","fours","trout","swear",
+  "brink","exert","hairy","drily","lager","moors","necks","patio","brows","packs",
+  "slabs","gypsy","moods","stale","blond","flags","salts","folds","flung","strap",
+  "tents","robot","vowel","goats","geese","taxed","cache","mound","weigh","boxer",
+  "oxide","tenor","caves","lever","slots","leeds","troop","rites","rusty","elves",
+  "fumes","trays","filed","sands","beech","diets","fares","faded","ashes","screw",
+  "truce","canon","lodge","nodes","foyer","poses","dwarf","grips","tides","steak",
+  "tonic","awoke","curse","spark","unfit","steer","dunes","locus","teens","miner",
+  "razor","candy","chaps","heirs","sails","flank","wreck","leapt","marsh","foxes",
+  "hardy","fonts","folks","tasty","trams","wiser","cheer","glove","groin","desks",
+  "gorge","merge","messy","rouge","remit","haste","tunes","belts","piers","pizza",
+  "stair","fetal","jewel","vines","proxy","herds","stain","blows","loser","unite",
+  "baron","pious","wells","hatch","hates","heady","wryly","cites","claws","elect",
+  "hasty","crypt","greed","hefty","wedge","bunny","ounce","pleas","amend","bulky",
+  "crisp","goose","pests","abbot","tying","havoc","lawns","spurs","token","bogus",
+  "float","motto","stray","ledge","vowed","fined","genus","leant","nicer","spate",
+  "click","fried","maize","stony","spies","lasts","scrum","aback","group","aided",
+  "groom","sleek","dizzy","gloss","decor","mused","rated","vault","dread","hangs",
+  "tonne","baked","crane","widen","seams","sings","lumps","scalp","shrug","lifts",
+  "curry","moles","woven","tempo","guise","sting","teddy","eerie","pinch","wrath",
+  "flask","liner","bulls","canoe","dodgy","envoy","raped","taxis","dolls","vodka",
+  "pores","resin","derby","gleam","await","deity","fools","icons","misty","scars",
+  "clung","timid","trait","hooks","tacit","burns","franc","alloy","fairs","flute",
+  "hymns","inert","plead","pumps","waits","loops","robes","grill","aroma","tramp",
+  "flair","chunk","dimly","cider","drown","masks","spade","flush","rogue","vinyl",
+  "wills","dived","pearl","wares","arson","lofty","modem","paste","piled","suede",
+  "yeast","clown","heath","bloom","broom","famed","tunic","cents","kicks","voter",
+  "erect","flaws","scant","barge","swans","dough","shire","shady","gulls","gully",
+  "infer","demon","ethic","sacks","chant","dwell","sauna","gravy","abide","blitz",
+  "cured","pouch","rains","rests","nouns","filth","cords","creep","danes","bingo",
+  "evils","clone","farce","oasis","traps","paces","plank","stern","gears","opted",
+  "baggy","nasal","tempt","lunar","coals","dogma","duvet","grove","peril","scorn",
+  "shrub","regal","bliss","boast","gland","pagan","tamil","tweed","atlas","queer",
+  "darts","lends","poked","siren","swine","viral","spear","idiom","needy","roast",
+  "snail","moths","shine","silky","twigs","whore","pedal","snack","grams","fleet",
+  "murky","rainy","squat","coral","incur","irons","swell","camel","decks","fatty",
+  "kites","laity","crate","maxim","scout","aunts","chick","feeds","piety","tally",
+  "aloof","inset","joked","peach","shark","bosom","lousy","wasps","groan","sited",
+  "slums","freer","barns","maids","reefs","adept","brute","guild","soles","gamma",
+  "booth","bully","casts","mucus","vogue","bluff","evade","delta","grape","rhyme",
+  "rover","smear","smash","tombs","avail","birch","lotus","stile","torso","manic",
+  "berth","circa","cling","scary","spite","tiled","domes","evoke","metro","aides",
+  "heaps","thorn","lance","rides","beats","booze","crook","denim","earns","forte",
+  "friar","scare","shone","lucid","urges","aloft","crawl","glint","humid","leafy",
+  "poker","venom","yarns","clump","lapse","shoal","slang","slows","tonal","toxin",
+  "mince","baker","sewer","smoky","avert","caste","equip","hotly","paler","cones",
+  "dales","spicy","gaunt","milky","sized","smelt","spice","spire","facet","stump",
+  "whiff","digit","dries","harem","knack","scrub","annoy","bouts","haunt","sperm",
+  "amply","carts","comma","debit","hound","rarer","whips","buggy","juicy","mixer",
+  "crush","fives","husky","relic","syrup","tread","typed","wharf","kilos","opium",
+  "snowy","vases","brace","bulge","gaily","grate","props","shawl","sonic","alpha",
+  "flare","sheds","spelt","comer","fussy","ionic","baton","fungi","suing","brood",
+  "ovens","aptly","cheat","laden","whigs","maple","piggy","gales","leaks","rhino",
+  "spill","crags","melon","optic","eaves","reeds","slips","spasm","brunt","bytes",
+  "cafes","hoard","inlet","shyly","smack","amuse","forge","junta","magma","furry",
+  "setup","slain","iraqi","isles","spree","swamp","timer","coils","edged","thugs",
+  "cages","frock","lurid","lymph","lochs","lumpy","madly","mufti","panes","synod",
+  "ambit","binds","gilts","inept","latch","shear","ducal","dukes","fuzzy","owing",
+  "salty","stead","beige","ferns","stint","tiers","writs","zebra","flick","nappy",
+  "watts","cooks","flint","solos","spiky","timed","volts","leaps","meats","moody",
+  "pussy","awash","defer","ached","alibi","leans","relay","beset","brine","chuck",
+  "mists","quilt","sheen","soggy","sling","saxon","cello","earls","oaths","slimy",
+  "sonar","vigil","mover","muted","pixel","banal","knobs","labor","limbo","paced",
+  "popes","robin","sneak","chefs","filly","gents","mania","mirth","privy","semen",
+  "snaps","clips","dazed","stunt","bales","clays","epoch","leash","silks","tinge",
+  "wakes","dryer","horde","soaps","clout","khaki","molar","pivot","visas","bends",
+  "bumpy","flyer","obese","savoy","abode","bucks","grids","slack","thyme","easel",
+  "agile","diver","jumps","perks","squid","tease","thump","grunt","prawn","brash",
+  "brook","brits","kiosk","raged","sixes","stung","trash","blush","dykes","dingy",
+  "doves","dowry","dummy","hides","logos","cairn","canny","carve","cores","crabs",
+  "crows","gable","bites","cuffs","grind","moons","radon","sofas","swede","broth",
+  "coded","fleas","stalk","tuned","fared","hullo","modal","racks","reich","serfs",
+  "ebony","foggy","forts","plugs","aegis","slits","tarts","amiss","choke","comet",
+  "feats","lured","mares","musty","burgh","bushy","chore","fable","flaps","pines",
+  "cubes","flake","plums","slick","slime","undid","ether","heron","lurch","masts",
+  "quell","sores","wired","blocs","celts","dully","craze","chasm","clove","polio",
+  "scoop","sieve","spike","booty","brawl","creek","stink","abyss","bumps","colds",
+  "glued","livid","payer","ranch","shuts","slugs","laird","mauve","mower","rabbi",
+  "cedar","grime","coped","gowns","gruff","hallo","hares","mores","shale","shave",
+  "fetus","plume","purge","amber","budge","mimic","ruddy","seedy","froth","graft",
+  "hinge","memos","paved","poise","vista","drier","terse","wager","weave","freak",
+  "larva","navel","waive","gills","joker","loner","glaze","heats","irate","pubic",
+  "soups","allay","braid","drone","funky","mason","shove","taped","acrid","clans",
+  "enema","fates","grabs","jetty","prick","recur","sniff","snout","vices","folio",
+  "looms","manly","sheaf","slant","slavs","aches","bossy","buddy","ensue","hawks",
+  "tacky","toads","carat","cocky","gusto","lithe","mites","palsy","colic","exits",
+  "mamma","whine","cadet","drake","erase","nexus","rouse","dined","foals","scowl",
+  "sects","shalt","snort","afoot","batty","bribe","chops","comfy","enact","fishy",
+  "gaped","plaid","putty","towed","admin","clamp","daisy","drawl","fling","forks",
+  "giddy","mules","petal","color","colts","doggy","expel","germs","sooty","adage",
+  "adore","foray","hydra","jeeps","rinse","sneer","taboo","waged","wales","arias",
+  "barmy","dodge","forgo","gasps","saver","vomit","wield","woody","fizzy","idols",
+  "loath","soapy","tolls","waltz","weedy","bleed","bogey","dregs","gipsy","leeks",
+  "motel","racer","ticks","unlit","warts","apace","canes","hunch","notch","pluck",
+  "pours","raked","spawn","speck","specs","alias","carol","chute","dicta","fangs",
+  "lyric","noose","rowdy","slash","smith","whims","crass","cures","loins","ramps",
+  "cults","fluke","growl","pinks","prise","tawny","veils","enrol","hitch","hoods",
+  "hoops","lobes","peaty","spans","sulky","beret","harpy","nudes","winch","bathe",
+  "doric","godly","mango","punks","roomy","tusks","aired","cocks","divan","erupt",
+  "fixes","frets","gorse","sabre","saucy","truer","zeros","boils","cramp","halve",
+  "peter","repel","stank","wraps","bobby","tufts","wacky","wispy","binge","blink",
+  "blobs","fells","kinky","kneel","lapel","slyly","spurt","whirl","chink","cuppa",
+  "dusky","jerky","mined","nutty","sever","tills","dares","domed","dumps","grail",
+  "grimy","piper","posse","quits","visor","beaks","ducts","laces","panda","panto",
+  "poppy","shunt","trite","aunty","beefy","cameo","dozed","fused","graze","slams",
+  "snarl","stirs","tubby","tuner","usher","wilds","demos","edict","girth","omens",
+  "sinks","studs","copse","gusts","meaty","smock","toner","toyed","truss","frees",
+  "fuses","shred","throb","babes","gamut","gauze","kilns","mafia","mints","mucky",
+  "scree","snuff","stoop","swarm","taper","vying","wench","clasp","feuds","horny",
+  "jails","lathe","lowly","quash","sills","spiny","swoop","caged","croft","faxes",
+  "fiend","humps","icily","smirk","dryly","erode","gaudy","grist","heave","highs",
+  "spout","sucks","tepid","vexed","aural","bogie","burly","champ","giver","holed",
+  "mourn","psalm","puffs","reels","rooks","align","baits","cadre","creak","diner",
+  "eater","glade","howls","mixes","sighs","sikhs","staid","stave","vouch","lanky",
+  "putts","rungs","snows","totem","trump","viola","whisk","wisps","ashen","axiom",
+  "diode","glens","jumbo","leaky","natal","plait","rapes","unify","vents","corks",
+  "coupe","coups","fluff","fumed","kiwis","manse","mitre","rowed","troll","waded",
+  "yanks","bonny","dwelt","fudge","glide","stags","tenet","bough","curbs","goody",
+  "intro","koran","omits","terns","uncut","boxed","crank","lunge","rafts","vibes",
+  "angst","baize","balmy","plush","polyp","shins","sinus","warms","aggro","bared",
+  "basil","bawdy","canto","chums","dolly","endow","grins","nymph","prism","quirk",
+  "rabid","snare","swirl","annex","delve","fakes","knits","scans","snags","spilt",
+  "wolds","wreak","clogs","dears","feral","riven","sakes","shorn","spins","suave",
+  "waxed","azure","combs","dials","frill","guile","idyll","jumpy","leper","longs",
+  "revue","shack","abort","allot","boggy","dowdy","parse","pawns","purer","rifts",
+  "swims","booms","copts","druid","dumpy","elude","hanky","hover","hubby","hulls",
+  "nobly","prune","quake","ripen","valet","coves","cynic","evict","lexis","mushy",
+  "pacts","quack","servo","skier","slats","tipsy","verve","vitae","acorn","bimbo",
+  "caked","chins","eases","flirt","lusty","nadir","oases","offal","voids","askew",
+  "bravo","crumb","femur","firth","hives","mogul","pithy","potty","tamed","afore",
+  "amaze","coyly","ditto","emits","epics","erred","greys","runny","sepia","showy",
+  "tatty","torts","twain","clang","inane","quail","randy","shrew","sloth","slung",
+  "aeons","belay","decoy","dotty","latex","nudge","piped","swipe","tithe","vests",
+  "whack","casks","cleft","meted","nervy","salvo","tongs","voles","abate","bolus",
+  "golly","gurus","hacks","hunts","inlay","jaunt","matey","norse","prays","skein",
+  "snide","spied","swish","vixen","bower","caper","chaff","croak","flier","medic",
+  "mural","sewed","shank","sided","slush","taint","wrest","crave","deans","manna",
+  "pique","pupae","roost","scabs","tinny","curds","dives","eject","gaols","hazel",
+  "jacks","kudos","moans","pangs","perky","ploys","quays","skips","sprig","waver",
+  "bairn","belle","berry","chimp","cobra","datum","elegy","excel","laced","malls",
+  "prams","pylon","reset","taker","tangy","veers","wring","adder","beady","busts",
+  "drags","duped","jaded","perms","spuds","wanly","xerox","zonal","bunks","cools",
+  "crowd","hilly","nifty","ovary","pesos","prank","skate","triad","waken","axles",
+  "buffs","cagey","corny","crier","doyen","fiefs","glean","harry","hinds","itchy",
+  "melee","olden","plied","spars","tomes","bangs","boobs","chats","crepe","humus",
+  "oiled","pleat","rayon","reams","remix","revel","scone","sleet","whoop","boars",
+  "credo","drips","kayak","liars","lilac","lolly","loony","rupee","silos","texan",
+  "usurp","blurb","butts","fated","fryer","gnome","grubs","lough","odder","puffy",
+  "quill","scrip","anvil","blots","buoys","fount","hoots","louts","moron","nears",
+  "quart","raves","reeve","serge","spoof","tango","vulva","wafer","asses","aught",
+  "barbs","ceded","dacha","dinky","limes","obeys","quins","soppy","tulip","wince",
+  "buxom","felon","honor","hoses","ponce","roped","stubs","surer","viper","adorn",
+  "booed","dross","hoist","mated","mulch","rages","tiara","twang","twine","alder",
+  "anion","clink","cooed","deems","gusty","ladle","larks","melts","memes","wiles",
+  "apses","capes","cowed","duets","flaky","hoary","honed","hoofs","jeers","leggy",
+  "paled","swaps","argon","fries","hails","moult","muses","nooks","nosed","oboes",
+  "outdo","poach","runes","spits","sward","udder","wooed","boozy","churn","copes",
+  "dinar","genie","goths","gulps","licks","mossy","shied","sonny","tripe","wiper",
+  "wonky","aorta","banjo","cysts","dames","ditty","dowel","fugue","gazes","haves",
+  "hutch","lingo","louse","lurks","recce","refit","spool","stews","waned","whist",
+  "yearn","aglow","booby","finch","flues","locum","loped","nippy","ochre","reedy",
+  "roars","steed","strut","tints","usury","wipes","yolks","amass","bleep","caved",
+  "chime","clods","dawns","fades","floss","glial","jerks","karma","leech","musky",
+  "nomad","oozed","pails","rebut","scold","seers","skuas","snipe","snore","spiel",
+  "trawl","umber","wrung","auger","coven","ethyl","fjord","hulks","joist","knave",
+  "ovals","payee","ritzy","rodeo","safes","sagas","satyr","shirk","skids","tsars",
+  "agora","aphid","bores","bugle","clams","droll","fetid","flees","gooey","hovel",
+  "irked","jazzy","manes","miser","padre","raven","riser","scion","skied","temps",
+  "torus","wordy","yells","flout","gaffe","goons","gruel","jibes","perch","phial",
+  "razed","shard","smote","thins","weirs","aspen","baser","billy","crone","ebbed",
+  "flops","mazes","mocks","podgy","poser","puree","recap","rivet","rower","scour",
+  "sedan","sioux","sloop","tenon","angus","anode","atoll","brews","dower","droop",
+  "embed","fords","fowls","inter","kinks","morse","pixie","rotas","sages","scarp",
+  "swabs","trill","untie","vegan","bendy","crock","djinn","dupes","hippo","juror",
+  "loopy","newts","quark","ricks","setts","skunk","teats","brats","dines","douse",
+  "harms","ketch","kitty","larch","liege","myrrh","pimps","prong","prowl","qualm",
+  "scoff","spats","spume","taunt","toned","welts","bandy","briar","dicky","dirge",
+  "faxed","glues","husks","hussy","keyed","knoll","parka","peaky","sowed","stoat",
+  "tempi","touts","trice","trove","affix","annul","cabby","calyx","doers","galas",
+  "islet","liken","mails","ouija","pater","radii","stork","surly","velar","adobe",
+  "augur","banns","canna","cunts","dosed","drape","finns","flail","glows","posit",
+  "soars","vials","wader","abhor","amity","aspic","clunk","covet","dents","diced",
+  "dishy","egged","eyrie","floes","halts","harks","jiffy","llama","malay","odium",
+  "ogres","pikes","plonk","pudgy","punts","rakes","saris","techs","thine","wools",
+  "aging","arses","bevel","bidet","caddy","cress","demur","downy","ennui","evens",
+  "farts","galls","homed","hymen","krone","layby","mangy","parry","pasts","plaza",
+  "plebs","polka","pored","riffs","sired","skimp","snobs","teeny","tines","wands",
+  "weeps","xenon","barks","betas","copra","corns","coypu","cubed","eider","gawky",
+  "harps","heals","henna","hived","krona","lofts","pasha","quids","sawed","squib",
+  "tardy","tibia","topaz","trios","atone","axing","belie","brawn","dicey","dudes",
+  "dyers","exude","faked","fetes","gloat","gouge","hocks","hyena","jowls","kinda",
+  "maori","maser","muggy","natty","sally","scaly","skiff","stoke","toils","upped",
+  "venal","waxes","bards","belch","boned","cacti","clank","cower","cushy","guano",
+  "hires","lusts","mikes","motes","navvy","quiff","saner","sheik","smogs","stabs",
+  "stoic","swoon","turds","tweak","weals","wrens","dildo","duels","feign","flips",
+  "ghoul","hanks","knell","lures","mimed","muzzy","omega","pinny","ratty","rowan",
+  "slurs","spore","tabby","tucks","verso","cabal","chard","emery","gauls","hunks",
+  "minim","oriel","paves","quads","raved","slake","softy","tulle","bantu","boney",
+  "crony","cusps","deeps","doped","fanny","gongs","hikes","hurls","imbue","kebab",
+  "loess","naira","oozes","oscar","pared","plumb","pokes","reaps","rerun","ruder",
+  "salve","spunk","swill","theta","thuds","treks","tryst","vapid","whirr","adieu",
+  "ascot","bakes","beaux","bijou","boded","bosch","calms","cased","conch","croup",
+  "dandy","dikes","doted","edits","frond","gnats","goner","grebe","idled","jihad",
+  "kerbs","knead","leach","mains","meson","mowed","oldie","opals","pates","sedge",
+  "sinew","sitar","slaps","slops","tacks","tilth","waifs","wails","waxen","whelk",
+  "winks","zoned","amour","beget","blurt","boron","burrs","eking","email","exalt",
+  "fasts","foots","fouls","gouts","grits","grope","guava","laths","meads","ninny",
+  "peals","pelts","prude","pygmy","quips","seeps","swash","tilts","tuber","vales",
+  "wicks","wimps","altos","arced","argus","baccy","baled","bally","beano","becks",
+  "claps","cleat","clots","cokes","decry","deign","ember","extol","filmy","gourd",
+  "hauls","krill","marge","moray","oaken","paean","pawed","peels","perry","proms",
+  "retch","rondo","scamp","scams","soaks","spook","spoor","sulks","swath","toffs",
+  "tumor","twirl","vanes","amble","avian","bella","bigot","bluer","bongo","botch",
+  "codex","dotes","dunce","facia","favor","feint","fleck","fucks","hiker","igloo",
+  "multi","munch","newel","rants","sires","thane","thong","afire","argot","aryan",
+  "balsa","bests","blurs","daunt","doles","gauzy","gavel","gulfs","hells","largo",
+  "limey","missy","moats","preen","rusks","sower","trope","twill","yawns","baulk",
+  "beery","bodes","cinch","fosse","jibed","jolts","kilts","limed","lucre","mamas",
+  "mange","mitts","moped","mousy","phony","rears","rinks","sable","scoot","scull",
+  "sidle","slink","squaw","stoup","talon","titan","viols","babel","bilge","blips",
+  "chirp","clade","dryad","faddy","fiord","foils","furze","gassy","glebe","kaput",
+  "lynch","nicks","ovoid","phlox","pilau","robed","roved","samba","seamy","slims",
+  "smuts","tench","trier","trots","tunny","twerp","unwed","weans","welds","wight",
+  "aping","bails","betel","bleat","blest","caned","chews","chocs","clack","coots",
+  "deary","deuce","doled","ferny","flits","fusty","hater","joust","leery","macaw",
+  "mends","mumps","oomph","pasty","plasm","pukka","rucks","senor","skims","spivs",
+  "stele","tacos","tamer","vetch","wafts","yoked","aster","bares","batik","beryl",
+  "bison","blare","boers","bosun","cadge","emirs","gated","gummy","ivies","lazed",
+  "lodes","pecan","plies","prigs","quire","reals","riled","ruffs","rumps","shewn",
+  "sines","snips","toddy","togas","troth","wadis","whelp","wined","yokel","agape",
+  "apter","beeps","chine","chump","corms","creel","foams","golem","helms","humor",
+  "imams","inked","jawed","keels","lemma","levee","levis","limos","loons","numbs",
+  "pales","peony","pined","piton","pyres","reeks","smite","splay","spurn","tires",
+  "tykes","wilts","agate","bight","boson","brier","byway","chafe","chide","corgi",
+  "dulls","egret","exult","fawns","fiats","folie","foxed","frump","goofy","gumbo",
+  "horsy","koala","lairs","liens","lisle","meths","midge","miler","musts","mutes",
+  "nelly","oakum","papas","pecks","peeps","purrs","rearm","rinds","roams","runic",
+  "sappy","sated","sifts","snook","snubs","sprat","stuns","sully","swain","tares",
+  "tarns","yokes","autos","basks","bided","biros","blase","capon","cheep","chits",
+  "clefs","cluck","conic","cooee","cowls","dells","divas","drays","eared","flans",
+  "fogey","hazes","hiked","hosed","jades","jingo","khans","kiddy","lamas","lemur",
+  "lotto","lutes","miaow","mimes","monad","naves","neigh","ogled","pesky","romps",
+  "rosin","savvy","schwa","shies","shyer","snoop","sodas","sours","sties","stomp",
+  "strop","sways","tapir","tawse","toady","toper","unfed","valor","washy","whorl",
+  "wrack","yogis","abuts","anise","avers","blimp","catty","coned","coxes","cruet",
+  "cubit","curio","deism","delft","drams","foamy","gored","hicks","hooch","impel",
+  "jabot","jambs","kirks","lifer","loamy","lupin","meres","mingy","mired","paged",
+  "palls","pansy","pease","prows","pulpy","recto","rills","shuns","sisal","skits",
+  "skulk","slobs","snaky","stash","strum","tames","tarry","tings","trews","turps",
+  "tweet","unzip","voile","wades","wombs","basal","boles","bosky","bused","cawed",
+  "coons","damns","dekko","doges","durum","elope","elver","fitly","gecko","gibes",
+  "groat","heeds","hexes","huffy","ikons","jests","lasso","marts","mucks","octet",
+  "polys","poofs","pried","prods","rigor","riper","scald","sexed","skirl","sooth",
+  "spode","stilt","strew","swami","tangs","turfs","tyros","wends","wifey","wormy",
+  "ailed","aitch","aloes","baste","begum","besom","caber","cavil","chomp","churl",
+  "cissy","croon","dirks","divot","faery","frays","gaffs","gammy","hared","ingot",
+  "jemmy","junks","limps","lulls","neuro","nonce","novae","patty","peons","pings",
+  "prole","raver","riche","ruses","satan","slaty","sleds","sloes","squab","swank",
+  "warps","yeses","auras","barer","bayed","bides","borax","brill","burps","calve",
+  "chars","chive","chuse","comas","coops","cored","coxed","craps","dimes","dodos",
+  "edify","ewers","eying","fakir","fends","frier","gapes","gayer","gilds","gnash",
+  "gyros","halma","halos","haply","helot","jenny","lames","lysol","napes","newsy",
+  "nitro","palmy","quaff","regia","riles","rumba","rushy","sadhu","scuds","scurf",
+  "seine","senna","sluts","snuck","spank","swazi","swots","tabor","taffy","tammy",
+  "tress","twits","wanes","zooms","abler","abysm","appro","arete","astir","attar",
+  "bagel","befit","bloat","boric","braes","brims","bruin","bylaw","chock","civet",
+  "clime","corse","cribs","crick","cruse","cuter","daubs","debug","dhows","dixie",
+  "dowse","drool","dyads","expos","flume","genii","gnaws","grays","haulm","hewed",
+  "inapt","jerry","kapok","kraal","lamed","lauds","leers","lycee","maces","mewed",
+  "mulls","mynah","novas","opine","panga","pilaf","plage","preys","prosy","rebus",
+  "rehab","repot","roves","ruing","rummy","rusts","shews","shits","singe","spews",
+  "stagy","stows","swigs","tansy","toots","weeny","whets","wooer","wowed","yodel",
+  "adzes","agave","aphis","april","avows","bawls","bayou","boors","brens","cacao",
+  "caffs","colas","divvy","dolts","ducat","elide","fiber","filch","finis","frisk",
+  "gages","gaits","geums","gibed","gouty","hazed","hilts","homos","lisps","lolls",
+  "lowed","lyres","mealy","minks","moots","narks","nerds","nukes","orals","ousts",
+  "plash","plods","pseud","puked","pumas","quern","quoin","rasps","rheas","rheum",
+  "runts","saxes","scrag","scuff","sears","shahs","siree","sissy","skeps","slays",
+  "slosh","snood","stunk","sumps","sylph","tepee","therm","thole","totes","twixt",
+  "vamps","vexes","yawed","yelps","abase","acned","agues","amirs","antic","balks",
+  "bawds","bergs","biked","boons","borer","briny","bungs","certs","chugs","codas",
+  "coney","crams","cubby","culls","czars","dinos","dopes","dusts","dweeb","echos",
+  "eclat","educe","emend","facer","fauns","feted","flogs","flunk","geeks","girds",
+  "gluts","glyph","gonad","gulch","hawed","hooey","huffs","icier","idler","japes",
+  "joule","kazoo","knout","laxly","massy","mauls","nacre","namer","nixed","nosey",
+  "oiler","okapi","omani","owlet","parky","pawky","pawls","pieta","prate","pulps",
+  "punic","rajah","rands","raspy","ravel","rayed","rejig","rived","sahib","saute",
+  "sibyl","skews","snick","soled","sprit","talus","teems","thaws","tubas","ulnae",
+  "upend","vesta","vivas","waked","withe","anglo","annas","annum","antes","areca",
+  "beets","benny","bines","blued","bolls","bract","brads","brays","brigs","bulks",
+  "coifs","condo","covey","crake","crape","crimp","dados","darns","deify","dhoti",
+  "dints","direr","dopey","dozes","drupe","dunks","fecal","fetor","fifes","flays",
+  "fluty","frizz","fuggy","geeky","gores","guyed","hafts","haint","harts","hones",
+  "injun","inure","iotas","ivied","kelts","klick","lamer","laved","liana","lilts",
+  "lobed","lopes","mamba","metes","middy","mooed","moony","muffs","nabob","naiad",
+  "neaps","osier","ouzel","paned","peeks","pigmy","pions","poesy","pouts","pouty",
+  "preps","quoit","recon","rimed","roods","roues","routs","rumor","sedgy","slews",
+  "snugs","stims","strow","styes","suety","swats","swops","throe","tilde","toque",
+  "toted","tunas","unman","uvula","vapor","vaunt","viler","wanks","weald","wefts",
+  "wolfs","yawls","yowls","abaci","abash","abets","acing","apish","apnea","armor",
+  "assoc","bated","bents","biffs","bourn","brags","busby","campy","cants","caret",
+  "carps","cedes","celia","chary","civvy","clews","cocos","coign","coked","conks",
+  "cotes","cyder","damps","davit","debag","demob","diked","doffs","donut","dooms",
+  "drubs","dynes","effed","eland","elate","farsi","faves","fezes","figgy","funks",
+  "gaels","gauds","gawps","ghats","glees","goads","goofs","grots","gybed","gybes",
+  "hahas","hecks","hewer","hijab","hobos","honks","huzza","indie","infra","jimmy",
+  "jived","jives","joyed","julep","lakhs","leafs","lents","libre","lidos","lings",
+  "liras","maims","mavis","maxed","mazed","meany","melan","milks","mires","mocha",
+  "mokes","moldy","molls","mopes","mulct","mutts","mynas","negus","nitre","nixes",
+  "oared","oasts","outed","parch","pares","parrs","piked","plops","poops","poppa",
+  "pries","purls","rased","rawer","rends","roans","scand","scram","scuts","shawm",
+  "shuck","shush","silts","slogs","snogs","sotho","souse","sumac","tarsi","teaze",
+  "techy","telco","thews","tided","tiffs","tokay","trims","trued","tubed","tzars",
+  "unsay","unsex","vaxes","vibed","virtu","wains","whang","whirs","whits","wooly",
+  "yahoo","yakka","abaft","abbes","abeam","addle","admix","aerie","afoul","aight",
+  "alack","amahs","amain","ameba","ameer","amped","amuck","ancle","anent","appal",
+  "arras","arums","aspie","avast","awing","ayahs","baaed","baboo","babus","bants",
+  "bates","bedim","beefs","befel","begad","begat","begot","berms","bhang","biers",
+  "biggy","bilks","biped","blabs","blams","blent","blogs","boing","bokeh","boner",
+  "brane","braze","bream","breve","broil","bruit","bunts","burgs","burke","butch",
+  "calif","calks","carny","caulk","cauls","chaws","chivy","choky","chows","clads",
+  "clave","clits","cloys","conge","cooky","coyer","cozen","crore","curst","dally",
+  "dazes","debar","deist","dices","dicks","didst","doggo","doily","doner","doula",
+  "doxed","doxes","doyly","drats","drear","dropt","ducky","dunno","durst","dyked",
+  "ebola","ebook","elfin","emeer","emoji","endue","enemy","envoi","epees","exome",
+  "faker","faugh","fauna","faved","feces","feoff","fifis","filet","finna","fleek",
+  "flyby","foist","frore","fugly","furls","fuzes","gaged","gamed","gamps","garbo",
+  "garbs","gawks","gelds","gists","glace","gluey","gnarl","golfs","gonna","gotta",
+  "goyal","guion","gunny","hadji","hasps","helve","hench","hertz","hexed","hindi",
+  "hippy","homey","hooky","hotch","houri","hulas","humph","hygge","hying","iambi",
+  "iambs","idles","imbed","incel","indue","infix","intel","intra","jaggy","jakes",
+  "japan","jells","jilts","jinks","jinns","jolty","jowly","judas","jujus","junes",
+  "junky","karat","keens","kelpy","kempt","kepis","kerns","khmer","kited","knaps",
+  "kobos","kolas","kopje","kotow","kumis","kvass","kwela","ladar","laded","lades",
+  "lards","larns","lathi","laves","lawny","laxed","laxes","lazar","lazes","lento",
+  "lichi","licit","limns","liven","loafs","loofa","loots","lours","luffs","luges",
+  "lumme","lummy","malts","maxes","meeds","melds","merci","mezzo","miaou","midis",
+  "miens","milch","mizen","moils","molto","mooch","moose","morns","mosey","neath",
+  "nerdy","nerfs","netts","niffs","niffy","nilly","nines","noels","nohow","oaten",
+  "oaves","ogles","oinks","okays","ombre","oopsh","orate","orlop","otter","outgo",
+  "outre","oxeye","pally","papaw","passe","paxes","pedis","peens","peeve","peins",
+  "pekes","pekoe","peris","pewit","pifey","pipal","plunk","pocks","pokey","pommy",
+  "pones","potch","poufs","poxes","prest","prima","primp","prims","prink","pshaw",
+  "pucks","pukes","puled","pules","pupas","pursy","pyxes","qubit","quoth","ranee",
+  "ranis","rases","ratan","ratch","razes","reave","redid","remap","reran","retro",
+  "rhomb","rimes","rives","roach","roger","roils","roneo","ropey","rowel","ruche",
+  "sabot","saith","sango","sates","schwi","scows","sepal","shags","shams","shogi",
+  "shoos","sicks","siroc","sirup","skeet","skint","skyey","slunk","slyer","sonsy",
+  "soots","sough","spake","spays","spirt","spork","spued","spues","stoep","supra",
+  "surds","surfs","swart","swobs","swole","syncs","taiko","talls","tamps","taros",
+  "telic","testy","thais","theed","thrum","tikes","tined","tiros","tizzy","toped",
+  "topes","topis","towsy","treed","trues","trull","tumid","turnt","tutus","tween",
+  "twere","twerk","typos","ukase","unbar","union","unsaw","unsee","vacua","vaxed",
+  "vends","verey","vetos","viand","wanna","wared","whops","whoso","wikis","withy",
+  "wived","woofs","wowza","wrick","wrier","wroth","yetis","yobos","yowza","zebus",
+  "zetas","zions","zloty"
+];
+
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  // ----------------------------------------------------------------------
+  // config
+  // ----------------------------------------------------------------------
+  var APP_NAME = "Daily Word";
+  var ROWS = 6, COLS = 5;
+  var STATE_V = "v1";              // bump if the local-state shape changes
+  var DAY_MS = 86400000;           // ms in a day
+  var PING_MS = 4000;              // how often to broadcast "I'm here" while in the app
+  var PRESENCE_TIMEOUT_MS = 12000; // drop someone from the "here" list after this much silence
+  var PRUNE_DAYS = 120;            // forget local board state older than this (leaderboards are synced anyway)
+
+  // Only the top-N most frequent words can be the answer, so the daily puzzle is
+  // never something like "ZLOTY". Anything in window.ANSWERS is still accepted as
+  // a guess. 2330 lands the final answer pool at 2309 after the blocklist filter.
+  var ANSWER_POOL_SIZE = 2330;
+
+  // The puzzle-order permutation is seeded by a RANDOM value generated by the
+  // first player and shared in the config, so each launched instance gets its
+  // own word sequence (two apps started the same day show different words),
+  // while everyone inside one instance shares the seed and sees the same word.
+  // This constant is only a fallback if a config somehow lacks a seed.
+  var PERM_SEED = 0x5C0DEDA1;
+
+  // Words that are valid guesses but should NEVER be the puzzle answer — profanity,
+  // anatomy/sexual terms, and clinical words that would feel off as a daily reveal.
+  var ANSWER_BLOCKLIST = {
+    pussy:1, penis:1, sperm:1, semen:1, whore:1, bitch:1, cunts:1, cocks:1,
+    boobs:1, prick:1, sluts:1, dicks:1, clits:1, nudes:1, booty:1, bimbo:1,
+    horny:1, kinky:1, spunk:1, fucks:1, shits:1, asses:1, chink:1,
+    farts:1, poops:1, pukes:1, puked:1, feces:1, fecal:1, retch:1, enema:1,
+    spews:1,
+    pubic:1, mucus:1, vomit:1, bowel:1, polyp:1, tumor:1, ulcer:1, cysts:1,
+    sores:1, welts:1, groin:1
+  };
+
+  // ----------------------------------------------------------------------
+  // webxdc (with a tiny in-memory stub so this file also runs in a plain browser)
+  // ----------------------------------------------------------------------
+  var webxdc = window.webxdc || makeStub();
+
+  // ----------------------------------------------------------------------
+  // word pool. WORDS is the full guess-validation list in frequency order
+  // (most frequent first). ANSWER_POOL is the top slice the daily answer is
+  // drawn from. One list, two views — must be byte-identical on every device.
+  // ----------------------------------------------------------------------
+  var WORDS = (function () {
+    var seen = {}, out = [];
+    (window.ANSWERS || []).forEach(function (w) {
+      w = String(w).toLowerCase().replace(/[^a-z]/g, "");
+      if (w.length === COLS && !seen[w]) { seen[w] = 1; out.push(w); }
+    });
+    if (!out.length) out = ["about"];
+    return out;
+  })();
+  var WORD_SET = (function () { var s = {}; WORDS.forEach(function (w) { s[w] = 1; }); return s; })();
+  var ANSWER_POOL = WORDS.slice(0, Math.min(ANSWER_POOL_SIZE, WORDS.length))
+                         .filter(function (w) { return !ANSWER_BLOCKLIST[w]; });
+
+  // ----------------------------------------------------------------------
+  // deterministic daily word
+  // mulberry32 PRNG -> a fixed shuffle of the pool indices. The day's word is
+  // PERM[dayNo mod poolSize], so no word repeats for ~poolSize days (years).
+  // ----------------------------------------------------------------------
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  // PERM is built from the instance seed once the config is known.
+  var PERM = null;
+  function buildPerm(seed) {
+    var n = ANSWER_POOL.length, arr = new Array(n), i;
+    for (i = 0; i < n; i++) arr[i] = i;
+    var rnd = mulberry32((seed >>> 0) || PERM_SEED);
+    for (i = n - 1; i > 0; i--) {
+      var j = Math.floor(rnd() * (i + 1));
+      var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+    }
+    return arr;
+  }
+  function wordForDay(dayNo) {
+    if (!PERM) PERM = buildPerm(PERM_SEED);   // safety; normally set from config
+    var n = ANSWER_POOL.length;
+    var idx = (((dayNo % n) + n) % n);
+    return ANSWER_POOL[PERM[idx]].toUpperCase();
+  }
+
+  // Configurable rollover zone. The day index is the calendar date in the
+  // chosen timezone (anchored to that date's UTC midnight, so the index is a
+  // plain integer that's identical on every device once the zone is agreed).
+  // The first player picks the zone; everyone follows it (see config sync).
+  function dayFmt(tz) {
+    if (!tz || tz === "UTC") return null;
+    try {
+      var f = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
+      f.format(new Date());                          // probe — throws on an unknown zone
+      return f;
+    } catch (e) { return null; }
+  }
+  function dayNoWith(ts, f) {
+    if (!f) return Math.floor(ts / DAY_MS);          // UTC fallback
+    try {
+      var ps = f.formatToParts(new Date(ts)), y, m, d;
+      for (var i = 0; i < ps.length; i++) {
+        var p = ps[i];
+        if (p.type === "year") y = +p.value;
+        else if (p.type === "month") m = +p.value;
+        else if (p.type === "day") d = +p.value;
+      }
+      return Math.floor(Date.UTC(y, m - 1, d) / DAY_MS);
+    } catch (e) { return Math.floor(ts / DAY_MS); }
+  }
+  function localDayNo(ts) { return dayNoWith(ts, dtfDay); }
+  function dayNoNow() { return localDayNo(Date.now()); }
+  // first instant after `ts` at which the puzzle flips, for the given formatter
+  function nextRolloverWith(ts, f) {
+    var cur = dayNoWith(ts, f), lo = ts, hi = ts + 2 * DAY_MS, mid;
+    for (var i = 0; i < 42; i++) { mid = (lo + hi) / 2; if (dayNoWith(mid, f) > cur) hi = mid; else lo = mid; }
+    return Math.round(hi);
+  }
+  function setTZ(tz) {
+    var f = dayFmt(tz);
+    if (tz && tz !== "UTC" && f) { TZ = tz; dtfDay = f; }
+    else { TZ = "UTC"; dtfDay = null; }
+  }
+  // Puzzle #1 is the day the app was first opened (config.day0). epochDay is set
+  // from the config; until then numbering is relative to the day itself (= #1).
+  function puzzleNo(dayNo) { return dayNo - (epochDay == null ? dayNo : epochDay) + 1; }
+  function fmtDay(dayNo) {
+    var d = new Date(dayNo * DAY_MS);
+    try {
+      return d.toLocaleDateString(undefined, {
+        weekday: "short", month: "short", day: "numeric", timeZone: "UTC"
+      });
+    } catch (e) {
+      return d.toUTCString().slice(0, 11);
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  // dom
+  // ----------------------------------------------------------------------
+  var $ = function (id) { return document.getElementById(id); };
+  var $board = $("board"), $kb = $("keyboard"), $timer = $("timer");
+  var $toast = $("toast"), $banner = $("banner");
+  var $lbList = $("lb-list"), $lbCount = $("lb-count"), $lbEmpty = $("lb-empty"), $lbTitle = $("lb-title-text");
+  var $ovList = $("ov-list"), $ovEmpty = $("ov-empty");
+  var $challengeNo = $("challenge-no");
+  var $presence = $("presence"), $presenceText = $("presence-text");
+  var $dayLabel = $("day-label"), $dayPrev = $("day-prev"), $dayNext = $("day-next");
+  $("game-name").textContent = APP_NAME;
+
+  // board
+  var tiles = [], rowEls = [];
+  for (var r = 0; r < ROWS; r++) {
+    var rowEl = document.createElement("div");
+    rowEl.className = "row";
+    var rowTiles = [];
+    for (var c = 0; c < COLS; c++) {
+      var t = document.createElement("div");
+      t.className = "tile";
+      rowEl.appendChild(t);
+      rowTiles.push(t);
+    }
+    tiles.push(rowTiles); rowEls.push(rowEl);
+    $board.appendChild(rowEl);
+  }
+
+  // keyboard
+  var keyEls = {};
+  [["Q","W","E","R","T","Y","U","I","O","P"],
+   ["A","S","D","F","G","H","J","K","L"],
+   ["ENTER","Z","X","C","V","B","N","M","BACK"]].forEach(function (rowKeys, idx) {
+    var rowEl = document.createElement("div");
+    rowEl.className = "kb-row";
+    if (idx === 1) { var sL = document.createElement("div"); sL.className = "kb-spacer"; rowEl.appendChild(sL); }
+    rowKeys.forEach(function (key) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = "key"; b.dataset.key = key;
+      if (key === "ENTER") { b.textContent = "Enter"; b.classList.add("key-wide"); }
+      else if (key === "BACK") { b.textContent = "⌫"; b.classList.add("key-wide"); }
+      else { b.textContent = key; keyEls[key] = b; }
+      rowEl.appendChild(b);
+    });
+    if (idx === 1) { var sR = document.createElement("div"); sR.className = "kb-spacer"; rowEl.appendChild(sR); }
+    $kb.appendChild(rowEl);
+  });
+  $kb.addEventListener("click", function (e) {
+    var node = e.target;
+    while (node && node !== $kb && !(node.classList && node.classList.contains("key"))) node = node.parentNode;
+    if (node && node.dataset && node.dataset.key) handleKey(node.dataset.key);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === "Enter") handleKey("ENTER");
+    else if (e.key === "Backspace") handleKey("BACK");
+    else if (/^[a-zA-Z]$/.test(e.key)) handleKey(e.key.toUpperCase());
+    else return;
+    e.preventDefault();
+  });
+
+  // tabs + day nav
+  var activeTab = "today";
+  $("tabs").addEventListener("click", function (e) {
+    var node = e.target;
+    while (node && !(node.dataset && node.dataset.tab)) node = node.parentNode;
+    if (node && node.dataset.tab) setTab(node.dataset.tab);
+  });
+  $dayPrev.addEventListener("click", function () { changeViewedDay(-1); });
+  $dayNext.addEventListener("click", function () { changeViewedDay(1); });
+
+  // ----------------------------------------------------------------------
+  // state
+  // ----------------------------------------------------------------------
+  // The puzzle day depends on the configured timezone, which we only learn
+  // after replaying history — so these stay undefined until startGame().
+  var todayNo, viewedDay, ANSWER, DOCUMENT, DOC_FIELD;
+
+  var TZ = "UTC";             // rollover zone (IANA name) chosen by the first player
+  var dtfDay = null;          // Intl formatter for TZ (null === UTC)
+  var epochDay = null;        // day index of first launch — this is Daily #1, the earliest viewable day
+  var config = null;          // { tz, seed, day0, by, serial } — the lowest-serial config wins, for everyone
+  var pendingTz = null;       // tz we broadcast during setup, awaiting echo
+
+  var results = {};           // dayNo -> { addr -> { name, tries, time, won, ts, pattern } }
+  var gameReady = false;
+  var replayDone = false;
+
+  var local = null;           // per-device board state for TODAY
+  var SKEY = null;
+  var current = "";           // letters typed into the active row (today only, while !done)
+
+  // realtime presence
+  var rt = null;
+  var presence = {};          // addr -> { name, t }
+
+  // ----------------------------------------------------------------------
+  // local state (today only — past days are reconstructed from synced results)
+  // ----------------------------------------------------------------------
+  function localKey(dayNo) { return "daily:" + dayNo + ":" + STATE_V; }
+  function loadLocal() {
+    try { var raw = localStorage.getItem(SKEY); if (raw) return JSON.parse(raw); } catch (e) {}
+    return null;
+  }
+  function saveLocal() {
+    if (!SKEY) return;
+    try { localStorage.setItem(SKEY, JSON.stringify(local)); } catch (e) {}
+  }
+  function pruneOldLocal() {
+    try {
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var k = localStorage.key(i);
+        if (!k) continue;
+        if (k.lastIndexOf("dailyword:", 0) === 0 || k.lastIndexOf("wordchallenge:", 0) === 0) {
+          localStorage.removeItem(k); continue;   // leftovers from the old per-challenge app
+        }
+        var m = /^daily:(-?\d+):/.exec(k);
+        if (m && (todayNo - parseInt(m[1], 10)) > PRUNE_DAYS) localStorage.removeItem(k);
+      }
+    } catch (e) {}
+  }
+
+  // ----------------------------------------------------------------------
+  // scoring (standard Wordle rules, duplicate-letter aware) — always vs TODAY
+  // ----------------------------------------------------------------------
+  var RANK = { absent: 0, present: 1, correct: 2 };
+  function scoreGuess(guess) {
+    guess = guess.toUpperCase();
+    var out = new Array(COLS), counts = {}, i, ch;
+    for (i = 0; i < COLS; i++) { ch = ANSWER[i]; counts[ch] = (counts[ch] || 0) + 1; }
+    for (i = 0; i < COLS; i++) { if (guess[i] === ANSWER[i]) { out[i] = "correct"; counts[guess[i]]--; } }
+    for (i = 0; i < COLS; i++) {
+      if (out[i]) continue;
+      ch = guess[i];
+      if (counts[ch] > 0) { out[i] = "present"; counts[ch]--; } else out[i] = "absent";
+    }
+    return out;
+  }
+  function patternFor(guesses) {
+    return guesses.map(function (g) {
+      return scoreGuess(g).map(function (s) {
+        return s === "correct" ? "C" : s === "present" ? "P" : "A";
+      }).join("");
+    });
+  }
+
+  // ----------------------------------------------------------------------
+  // helpers / formatting
+  // ----------------------------------------------------------------------
+  function fmtTime(ms) {
+    if (!ms || ms < 0 || !isFinite(ms)) ms = 0;
+    var s = Math.round(ms / 1000), m = Math.floor(s / 60);
+    s -= m * 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+  function elapsed() {
+    if (local && local.fromSync) return local.syncTime || 0;
+    if (!local || !local.startedAt) return 0;
+    return Math.max(0, (local.endedAt || Date.now()) - local.startedAt);
+  }
+  function isToday() { return viewedDay === todayNo; }
+  function myResult(dayNo) {
+    var dm = results[dayNo];
+    return dm ? dm[webxdc.selfAddr] : null;
+  }
+
+  // ----------------------------------------------------------------------
+  // finished-on-another-device reconstruction (today only)
+  // We don't have the original guessed words (and the winning guess IS the
+  // answer, so we must never broadcast it) — show the colour pattern only.
+  // ----------------------------------------------------------------------
+  function adoptSyncedResult(r) {
+    if (!local || local.done || !r) return;
+    local.done = true;
+    local.won = !!r.won;
+    local.fromSync = true;
+    local.syncTries = r.tries;
+    local.syncTime = r.time;
+    local.syncPattern = Array.isArray(r.pattern) ? r.pattern : [];
+    local.broadcast = true;
+    current = "";
+    saveLocal();
+    if (gameReady) renderAll();
+  }
+
+  // ----------------------------------------------------------------------
+  // rendering — board
+  // ----------------------------------------------------------------------
+  function paintPattern(pattern, answerRow, answerWord) {
+    var pat = pattern || [];
+    for (var fr = 0; fr < ROWS; fr++) {
+      rowEls[fr].classList.remove("shake");
+      var prow = pat[fr];
+      for (var fc = 0; fc < COLS; fc++) {
+        var ft = tiles[fr][fc];
+        ft.className = "tile";
+        if (prow) {
+          var code = prow.charAt(fc);
+          ft.classList.add("filled", code === "C" ? "correct" : code === "P" ? "present" : "absent");
+          ft.textContent = (fr === answerRow && answerWord) ? answerWord.charAt(fc) : "";
+        } else {
+          ft.textContent = "";
+        }
+      }
+    }
+  }
+
+  function renderBoard() {
+    if (!gameReady) return;
+
+    // Browsing a past day: read-only reconstruction from our synced result.
+    if (!isToday()) {
+      var r = myResult(viewedDay);
+      if (r) {
+        var aRow = r.won ? (r.pattern || []).length - 1 : -1;
+        paintPattern(r.pattern, aRow, wordForDay(viewedDay));
+      } else {
+        paintPattern([], -1, null);   // we didn't play that day
+      }
+      return;
+    }
+
+    // Today, finished on another device: colour the pattern, no letters.
+    if (local.fromSync) {
+      var answerRow = local.won ? (local.syncPattern || []).length - 1 : -1;
+      paintPattern(local.syncPattern, answerRow, ANSWER);
+      return;
+    }
+
+    var activeRow = local.guesses.length;
+    for (var r2 = 0; r2 < ROWS; r2++) {
+      rowEls[r2].classList.remove("shake");
+      var guess = local.guesses[r2], sc = guess ? scoreGuess(guess) : null;
+      for (var c = 0; c < COLS; c++) {
+        var tl = tiles[r2][c];
+        tl.className = "tile";
+        if (guess) {
+          tl.textContent = guess[c];
+          tl.classList.add("filled", sc[c]);
+        } else if (r2 === activeRow && !local.done) {
+          var ltr = current[c] || "";
+          tl.textContent = ltr;
+          if (ltr) tl.classList.add("filled", "active");
+        } else {
+          tl.textContent = "";
+        }
+      }
+    }
+  }
+
+  function renderKeyboard() {
+    if (!gameReady) return;
+    var best = {};
+    if (isToday() && !local.fromSync) {
+      local.guesses.forEach(function (g) {
+        var sc = scoreGuess(g);
+        for (var i = 0; i < COLS; i++) {
+          var ch = g[i].toUpperCase();
+          if (!(ch in best) || RANK[sc[i]] > RANK[best[ch]]) best[ch] = sc[i];
+        }
+      });
+    }
+    Object.keys(keyEls).forEach(function (ch) {
+      var el = keyEls[ch];
+      el.classList.remove("correct", "present", "absent");
+      if (best[ch]) el.classList.add(best[ch]);
+    });
+  }
+
+  function renderTimer() {
+    if (!gameReady) return;
+    if (!isToday()) {
+      var r = myResult(viewedDay);
+      $timer.textContent = (r && r.won) ? fmtTime(r.time) : "—";
+      $timer.classList.remove("running");
+      return;
+    }
+    if (local.done) { $timer.textContent = fmtTime(elapsed()); $timer.classList.remove("running"); return; }
+    if (local.startedAt) { $timer.textContent = fmtTime(Date.now() - local.startedAt); $timer.classList.add("running"); }
+    else { $timer.textContent = "0:00"; $timer.classList.remove("running"); }
+  }
+
+  function renderBannerAndKeys() {
+    if (!gameReady) return;
+
+    // Past day: never playable. Show what happened (and reveal that day's word).
+    if (!isToday()) {
+      $kb.classList.add("hidden");
+      $banner.classList.remove("hidden");
+      var pr = myResult(viewedDay);
+      var word = wordForDay(viewedDay);
+      if (pr && pr.won) {
+        $banner.className = "banner win";
+        $banner.innerHTML = "<strong>You solved this in " + pr.tries + "/" + ROWS + "</strong> &middot; " + fmtTime(pr.time);
+      } else if (pr) {
+        $banner.className = "banner lose";
+        $banner.innerHTML = "<strong>You missed this one.</strong> The word was <strong>" + word + "</strong>.";
+      } else {
+        $banner.className = "banner info";
+        $banner.innerHTML = "You didn't play this day. The word was <strong>" + word + "</strong>.";
+      }
+      return;
+    }
+
+    if (local.done) {
+      $kb.classList.add("hidden");
+      $banner.classList.remove("hidden");
+      var elsewhere = local.fromSync ? " &middot; <em>finished on another device</em>" : "";
+      if (local.won) {
+        var nTries = local.fromSync ? local.syncTries : local.guesses.length;
+        $banner.className = "banner win";
+        $banner.innerHTML = "<strong>Solved in " + nTries + "/" + ROWS + "</strong> &middot; " + fmtTime(elapsed()) + elsewhere;
+      } else {
+        $banner.className = "banner lose";
+        $banner.innerHTML = "<strong>Out of guesses.</strong> The word was <strong>" + ANSWER + "</strong>." + elsewhere;
+      }
+    } else {
+      $kb.classList.remove("hidden");
+      $banner.classList.add("hidden");
+    }
+  }
+
+  function renderHeaderAndNav() {
+    $challengeNo.textContent = " #" + puzzleNo(viewedDay);
+    var label = fmtDay(viewedDay);
+    $dayLabel.innerHTML = isToday()
+      ? label + " <span class=\"today-tag\">&middot; today</span>"
+      : label;
+    $dayPrev.disabled = (epochDay == null || viewedDay <= epochDay);
+    $dayNext.disabled = isToday();
+  }
+
+  // ----------------------------------------------------------------------
+  // leaderboard (per day)
+  // ----------------------------------------------------------------------
+  function leaderboardFor(dayNo) {
+    var dm = results[dayNo] || {};
+    var arr = Object.keys(dm).map(function (addr) {
+      var x = dm[addr];
+      return { addr: addr, name: x.name || addr, tries: x.tries, time: x.time, won: !!x.won, ts: x.ts || 0, pattern: x.pattern || [] };
+    });
+    arr.sort(function (a, b) {
+      if (a.won !== b.won) return a.won ? -1 : 1;
+      if (a.won) { if (a.tries !== b.tries) return a.tries - b.tries; if (a.time !== b.time) return a.time - b.time; }
+      return a.ts - b.ts;
+    });
+    return arr;
+  }
+  function leaderForDay(dayNo) { var a = leaderboardFor(dayNo); return (a.length && a[0].won) ? a[0] : null; }
+
+  var MEDALS = ["🥇", "🥈", "🥉"];
+  function buildTinyGrid(pattern) {
+    if (!pattern || !pattern.length) return null;
+    var wrap = document.createElement("div");
+    wrap.className = "lb-grid";
+    pattern.forEach(function (row) {
+      var rowEl = document.createElement("div");
+      rowEl.className = "lb-grow";
+      for (var i = 0; i < row.length; i++) {
+        var sq = document.createElement("span");
+        var letter = row.charAt(i);
+        sq.className = "lb-gs " + (letter === "C" || letter === "P" || letter === "A" ? letter : "A");
+        rowEl.appendChild(sq);
+      }
+      wrap.appendChild(rowEl);
+    });
+    return wrap;
+  }
+  function renderLeaderboard() {
+    var arr = leaderboardFor(viewedDay);
+    $lbTitle.textContent = isToday() ? "Today's leaderboard" : "Leaderboard";
+    $lbCount.textContent = arr.length ? "(" + arr.length + ")" : "";
+    $lbList.innerHTML = "";
+    if (!arr.length) {
+      $lbEmpty.classList.remove("hidden");
+      $lbEmpty.textContent = isToday()
+        ? "No one has finished yet — be the first."
+        : "No one finished this puzzle.";
+      return;
+    }
+    $lbEmpty.classList.add("hidden");
+    arr.forEach(function (e, idx) {
+      var li = document.createElement("li");
+      li.className = "lb-item" + (e.addr === webxdc.selfAddr ? " me" : "") + (e.won ? "" : " lost");
+      var main = document.createElement("div"); main.className = "lb-main";
+      var rankCell = document.createElement("span"); rankCell.className = "lb-rank";
+      rankCell.textContent = e.won ? (MEDALS[idx] || (idx + 1) + ".") : "💀";
+      var nameCell = document.createElement("span"); nameCell.className = "lb-name";
+      nameCell.textContent = e.name + (e.addr === webxdc.selfAddr ? " (you)" : "");
+      var triesCell = document.createElement("span"); triesCell.className = "lb-tries";
+      triesCell.textContent = (e.won ? e.tries : "X") + "/" + ROWS;
+      var timeCell = document.createElement("span"); timeCell.className = "lb-time";
+      timeCell.textContent = e.won ? fmtTime(e.time) : "—";
+      main.appendChild(rankCell); main.appendChild(nameCell); main.appendChild(triesCell); main.appendChild(timeCell);
+      li.appendChild(main);
+      var grid = buildTinyGrid(e.pattern);
+      if (grid) li.appendChild(grid);
+      $lbList.appendChild(li);
+    });
+  }
+
+  // ----------------------------------------------------------------------
+  // overall standings (aggregate across every day)
+  // ----------------------------------------------------------------------
+  function currentStreak(addr) {
+    var maxDay = null;
+    Object.keys(results).forEach(function (dk) {
+      if (results[dk][addr]) { var d = +dk; if (maxDay === null || d > maxDay) maxDay = d; }
+    });
+    if (maxDay === null) return 0;
+    var s = 0, d = maxDay;
+    while (true) {
+      var dm = results[d], rr = dm && dm[addr];
+      if (rr && rr.won) { s++; d--; } else break;
+    }
+    return s;
+  }
+  function overallStandings() {
+    var byAddr = {};
+    Object.keys(results).forEach(function (dk) {
+      var day = +dk;
+      var dm = results[dk];
+      var dayLead = leaderForDay(day);
+      Object.keys(dm).forEach(function (addr) {
+        var rr = dm[addr];
+        var s = byAddr[addr] || (byAddr[addr] = {
+          addr: addr, name: rr.name || addr, games: 0, wins: 0, points: 0, golds: 0, tries: 0, time: 0
+        });
+        s.name = rr.name || s.name;
+        s.games++;
+        if (rr.won) { s.wins++; s.points += (ROWS + 1 - rr.tries); s.tries += rr.tries; s.time += rr.time; }
+        if (dayLead && dayLead.addr === addr) s.golds++;
+      });
+    });
+    var arr = Object.keys(byAddr).map(function (a) {
+      var s = byAddr[a];
+      s.streak = currentStreak(a);
+      s.avg = s.wins ? (s.tries / s.wins) : 0;
+      return s;
+    });
+    arr.sort(function (a, b) {
+      if (a.points !== b.points) return b.points - a.points;
+      if (a.golds !== b.golds) return b.golds - a.golds;
+      if (a.wins !== b.wins) return b.wins - a.wins;
+      if (a.tries !== b.tries) return a.tries - b.tries;   // fewer guesses across wins
+      return a.time - b.time;
+    });
+    return arr;
+  }
+  function renderOverall() {
+    var info = $("tz-info");
+    if (info) info.textContent = config
+      ? "🕛 New word every day at midnight " + (config.tz || "UTC").replace(/_/g, " ") + "."
+      : "";
+    var arr = overallStandings();
+    $ovList.innerHTML = "";
+    var head = $("ov-head");
+    if (!arr.length) { $ovEmpty.classList.remove("hidden"); if (head) head.classList.add("hidden"); return; }
+    $ovEmpty.classList.add("hidden");
+    if (head) head.classList.remove("hidden");
+    function cell(cls, txt) { var s = document.createElement("span"); s.className = cls; s.textContent = txt; return s; }
+    arr.forEach(function (e, idx) {
+      var li = document.createElement("li");
+      li.className = "ov-row" + (e.addr === webxdc.selfAddr ? " me" : "");
+      li.appendChild(cell("ov-rank", idx + 1));
+      li.appendChild(cell("ov-name", e.name + (e.addr === webxdc.selfAddr ? " (you)" : "")));
+      li.appendChild(cell("ov-num", e.wins + "/" + e.games));
+      li.appendChild(cell("ov-num", e.wins ? e.avg.toFixed(1) : "—"));
+      li.appendChild(cell("ov-num", e.golds ? String(e.golds) : ""));
+      li.appendChild(cell("ov-num", e.streak >= 2 ? String(e.streak) : ""));
+      li.appendChild(cell("ov-pts", e.points));
+      $ovList.appendChild(li);
+    });
+  }
+
+  // ----------------------------------------------------------------------
+  // chat bubble document/summary text
+  // ----------------------------------------------------------------------
+  function summaryText() {
+    var arr = leaderboardFor(todayNo);
+    var played = arr.length + (arr.length === 1 ? " player" : " players");
+    var top = leaderForDay(todayNo);
+    var line;
+    if (!arr.length) line = "Daily #" + puzzleNo(todayNo) + " — nobody's played yet";
+    else if (top) line = "🏆 " + top.name + " · " + top.tries + "/" + ROWS + " in " + fmtTime(top.time) + " · " + played;
+    else line = played + " · nobody's cracked today yet 😬";
+    var ov = overallStandings();
+    if (ov.length && ov[0].points > 0) line += " | Overall: " + ov[0].name + " (" + ov[0].points + " pts)";
+    return line;
+  }
+
+  // ----------------------------------------------------------------------
+  // realtime presence
+  // ----------------------------------------------------------------------
+  var ENC = (typeof TextEncoder !== "undefined") ? new TextEncoder() : null;
+  var DEC = (typeof TextDecoder !== "undefined") ? new TextDecoder() : null;
+  function startRealtime() {
+    if (rt || typeof webxdc.joinRealtimeChannel !== "function" || !ENC || !DEC) return;
+    try {
+      rt = webxdc.joinRealtimeChannel();
+      rt.setListener(onRealtime);
+    } catch (e) { rt = null; return; }
+    sendPing();
+    setInterval(sendPing, PING_MS);
+    setInterval(function () { prunePresence(); renderPresence(); }, 2000);
+  }
+  function sendPing() {
+    if (!rt) return;
+    try {
+      rt.send(ENC.encode(JSON.stringify({
+        type: "ping",
+        addr: webxdc.selfAddr,
+        name: webxdc.selfName || webxdc.selfAddr || "Player",
+        t: Date.now()
+      })));
+    } catch (e) {}
+  }
+  function onRealtime(data) {
+    try {
+      var msg = JSON.parse(DEC.decode(data));
+      if (msg && msg.type === "ping" && msg.addr && msg.addr !== webxdc.selfAddr) {
+        presence[msg.addr] = { name: msg.name || msg.addr, t: Date.now() };
+        renderPresence();
+      }
+    } catch (e) {}
+  }
+  function prunePresence() {
+    var now = Date.now();
+    Object.keys(presence).forEach(function (a) {
+      if (now - presence[a].t > PRESENCE_TIMEOUT_MS) delete presence[a];
+    });
+  }
+  function renderPresence() {
+    var names = Object.keys(presence).map(function (a) { return presence[a].name; });
+    if (!names.length) { $presence.classList.add("hidden"); return; }
+    $presence.classList.remove("hidden");
+    var verb = names.length === 1 ? " is here" : " are here";
+    var who;
+    if (names.length === 1) who = names[0];
+    else if (names.length === 2) who = names[0] + " and " + names[1];
+    else if (names.length === 3) who = names[0] + ", " + names[1] + " and " + names[2];
+    else who = names[0] + ", " + names[1] + " and " + (names.length - 2) + " others";
+    $presenceText.textContent = who + verb;
+  }
+
+  // ----------------------------------------------------------------------
+  // updates
+  // ----------------------------------------------------------------------
+  function applyUpdate(u) {
+    var p = u.payload;
+    if (!p) return;
+    if (p.type === "config") { onConfig(p, u.serial); return; }
+    if (p.type !== "result" || !p.addr) return;
+    if (typeof p.day !== "number") return;
+    var dm = results[p.day] || (results[p.day] = {});
+    if (!dm[p.addr]) {
+      dm[p.addr] = {
+        name: p.name, tries: p.tries, time: p.time, won: !!p.won, ts: p.ts || 0,
+        pattern: Array.isArray(p.pattern) ? p.pattern : []
+      };
+      if (p.addr === webxdc.selfAddr && p.day === todayNo && local) {
+        local.broadcast = true; saveLocal();
+        if (!local.done) adoptSyncedResult(dm[p.addr]);   // finished on another device
+      }
+    }
+  }
+
+  function broadcastResult() {
+    var pattern = patternFor(local.guesses);
+    var me = {
+      name: webxdc.selfName || webxdc.selfAddr || "Player",
+      tries: local.guesses.length,
+      time: elapsed(),
+      won: !!local.won,
+      ts: Date.now(),
+      pattern: pattern
+    };
+    var dm = results[todayNo] || (results[todayNo] = {});
+    if (!dm[webxdc.selfAddr]) dm[webxdc.selfAddr] = me;
+    local.broadcast = true; saveLocal();
+
+    // Notify the chat only when someone takes the #1 spot AND they aren't the very
+    // first entry on today's board (no one to lead against yet — would be spammy).
+    var top = leaderForDay(todayNo);
+    var imLeader = top && top.addr === webxdc.selfAddr;
+    var firstOnBoard = Object.keys(dm).length === 1;
+    var leadTake = imLeader && !firstOnBoard;
+
+    var resultText = me.won
+      ? "📊 " + me.name + " solved " + DOCUMENT + " in " + me.tries + "/" + ROWS + " — " + fmtTime(me.time)
+      : "📊 " + me.name + " couldn't solve " + DOCUMENT + " (X/" + ROWS + ")";
+
+    var update = {
+      payload: {
+        type: "result", day: todayNo, addr: webxdc.selfAddr,
+        name: me.name, tries: me.tries, time: me.time, won: me.won, ts: me.ts, pattern: pattern
+      },
+      info: resultText,
+      document: DOC_FIELD,
+      summary: summaryText()
+    };
+    var descr = resultText;
+
+    if (leadTake) {
+      var leadText = "🏆 " + me.name + " is now leading " + DOCUMENT
+        + " — " + me.tries + "/" + ROWS + " in " + fmtTime(me.time);
+      update.info = leadText;
+      update.notify = { "*": leadText };
+      descr = leadText;
+    }
+    webxdc.sendUpdate(update, descr);
+  }
+
+  // ----------------------------------------------------------------------
+  // input / game flow
+  // ----------------------------------------------------------------------
+  var toastTimer = null;
+  function toast(msg, ms) {
+    $toast.textContent = msg;
+    $toast.classList.remove("hidden");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { $toast.classList.add("hidden"); }, ms || 1400);
+  }
+  function shakeRow() {
+    var el = rowEls[local.guesses.length];
+    if (!el) return;
+    el.classList.remove("shake"); void el.offsetWidth; el.classList.add("shake");
+  }
+
+  function handleKey(key) {
+    if (!gameReady || !isToday() || local.done) return;
+    if (key === "ENTER") return submitGuess();
+    if (key === "BACK") { if (current.length) { current = current.slice(0, -1); renderBoard(); } return; }
+    if (/^[A-Z]$/.test(key) && current.length < COLS) {
+      if (!local.startedAt) { local.startedAt = Date.now(); saveLocal(); renderTimer(); }
+      current += key;
+      renderBoard();
+    }
+  }
+
+  var PRAISE = ["Genius!", "Magnificent!", "Impressive!", "Splendid!", "Great!", "Phew!"];
+  function submitGuess() {
+    if (current.length < COLS) { toast("Not enough letters"); shakeRow(); return; }
+    var guess = current;
+    if (!WORD_SET[guess.toLowerCase()]) { toast("Not in word list"); shakeRow(); return; }
+    if (!local.startedAt) local.startedAt = Date.now();
+    local.guesses.push(guess);
+    current = "";
+    var won = (guess === ANSWER);
+    var lost = !won && local.guesses.length >= ROWS;
+    if (won || lost) { local.done = true; local.won = won; local.endedAt = Date.now(); }
+    saveLocal();
+    renderBoard(); renderKeyboard(); renderTimer(); renderBannerAndKeys();
+    if (won) toast(PRAISE[Math.min(local.guesses.length - 1, PRAISE.length - 1)], 2400);
+    else if (lost) toast(ANSWER, 3000);
+    if (local.done) { broadcastResult(); renderLeaderboard(); }
+  }
+
+  // ----------------------------------------------------------------------
+  // tabs / day browsing
+  // ----------------------------------------------------------------------
+  function setTab(t) {
+    activeTab = t;
+    $("tab-today").classList.toggle("active", t === "today");
+    $("tab-overall").classList.toggle("active", t === "overall");
+    document.body.classList.toggle("tab-overall", t === "overall");
+    if (t === "overall") renderOverall();
+    else renderAll();
+  }
+  function changeViewedDay(delta) {
+    var d = viewedDay + delta;
+    if (epochDay == null || d < epochDay || d > todayNo) return;
+    viewedDay = d;
+    renderAll();
+  }
+
+  // ----------------------------------------------------------------------
+  // day setup / rollover
+  // ----------------------------------------------------------------------
+  // Point the game at a given day index: pick its word, load that day's board.
+  function setDay(dayNo) {
+    todayNo = dayNo;
+    ANSWER = wordForDay(todayNo);
+    DOCUMENT = APP_NAME + " #" + puzzleNo(todayNo);
+    DOC_FIELD = "#" + puzzleNo(todayNo);
+    SKEY = localKey(todayNo);
+    local = loadLocal() || { guesses: [], startedAt: 0, endedAt: 0, done: false, won: false, broadcast: false };
+    if (!Array.isArray(local.guesses)) local.guesses = [];
+    current = "";
+  }
+  // After (re)pointing at today, sync our own state with the network.
+  function reconcileSelf() {
+    var mine = myResult(todayNo);
+    if (local && !local.done && mine) adoptSyncedResult(mine);            // finished on another device
+    else if (local && local.done && !local.broadcast && !mine) broadcastResult(); // finished offline, never sent
+  }
+  // If the rollover instant passes (or the zone changes) while the app is open,
+  // switch to the new day's puzzle.
+  function checkRollover() {
+    if (!gameReady) return;
+    var now = dayNoNow();
+    if (now === todayNo) return;
+    var wasOnToday = isToday();
+    setDay(now);
+    if (wasOnToday || viewedDay > todayNo) viewedDay = todayNo;
+    reconcileSelf();
+    if (activeTab === "overall") renderOverall(); else renderAll();
+  }
+
+  // ----------------------------------------------------------------------
+  // boot
+  // ----------------------------------------------------------------------
+  function renderAll() {
+    renderHeaderAndNav();
+    renderBoard(); renderKeyboard(); renderTimer(); renderBannerAndKeys(); renderLeaderboard(); renderPresence();
+  }
+
+  function startGame() {
+    if (gameReady) return;
+    gameReady = true;
+    setDay(dayNoNow());
+    viewedDay = todayNo;
+    pruneOldLocal();
+    document.body.classList.remove("loading");
+    document.body.classList.remove("setup-mode");
+    setTab("today");
+    startRealtime();
+    reconcileSelf();
+    if (activeTab === "overall") renderOverall(); else renderAll();
+  }
+
+  // ----------------------------------------------------------------------
+  // config sync — the first player sets the timezone, a random word-seed, and the
+  // first day; everyone follows. The config with the LOWEST update serial wins (the
+  // totally-ordered stream is identical on every device), so simultaneous setups
+  // still converge to one. Each launched instance gets its own seed + day0, so two
+  // apps started the same day run different words and number from their own Day 1.
+  // ----------------------------------------------------------------------
+  function onConfig(p, serial) {
+    if (!p || !p.tz) return;
+    if (typeof serial !== "number") serial = 1 << 30;
+    if (config && config.serial <= serial) return;     // keep the earliest one
+    setTZ(p.tz);
+    PERM = buildPerm(typeof p.seed === "number" ? p.seed : PERM_SEED);
+    epochDay = (typeof p.day0 === "number") ? p.day0 : dayNoNow();
+    config = { tz: p.tz, seed: p.seed, day0: epochDay, by: p.by, serial: serial };
+    pendingTz = null;
+    if (gameReady) {
+      // a still-earlier config replaced the zone/seed/day0 after we started (rare
+      // simultaneous-setup race) — resync the day to the now-authoritative config
+      var wasOnToday = isToday();
+      setDay(dayNoNow());
+      if (wasOnToday || viewedDay > todayNo || viewedDay < epochDay) viewedDay = todayNo;
+      reconcileSelf();
+      if (activeTab === "overall") renderOverall(); else renderAll();
+    } else if (replayDone) {
+      startGame();                                      // we were on the setup screen — go
+    }
+  }
+
+  // ----------------------------------------------------------------------
+  // first-run setup screen
+  // ----------------------------------------------------------------------
+  var COMMON_TZ = [
+    "Pacific/Honolulu", "America/Anchorage", "America/Los_Angeles", "America/Denver",
+    "America/Chicago", "America/New_York", "America/Halifax", "America/Sao_Paulo",
+    "UTC", "Europe/London", "Europe/Paris", "Europe/Athens", "Africa/Johannesburg",
+    "Asia/Dubai", "Asia/Kolkata", "Asia/Bangkok", "Asia/Shanghai", "Asia/Tokyo",
+    "Australia/Sydney", "Pacific/Auckland"
+  ];
+  function gmtLabel(tz) {
+    try {
+      var ps = new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" }).formatToParts(new Date());
+      for (var i = 0; i < ps.length; i++) if (ps[i].type === "timeZoneName") return ps[i].value;
+    } catch (e) {}
+    return "";
+  }
+  function tzLabel(tz) { var g = gmtLabel(tz); return tz.replace(/_/g, " ") + (g ? " (" + g + ")" : ""); }
+  var setupBuilt = false;
+  function showSetup() {
+    document.body.classList.remove("loading");
+    document.body.classList.add("setup-mode");
+    if (setupBuilt) return;
+    setupBuilt = true;
+    var sel = $("tz-select");
+    var devTz = "UTC";
+    try { devTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"; } catch (e) {}
+    var list = [devTz], seen = {}; seen[devTz] = 1;
+    COMMON_TZ.forEach(function (z) { if (!seen[z]) { seen[z] = 1; list.push(z); } });
+    list.forEach(function (z, i) {
+      var o = document.createElement("option");
+      o.value = z;
+      o.textContent = (i === 0 ? "Your timezone — " : "") + tzLabel(z);
+      sel.appendChild(o);
+    });
+    sel.value = devTz;
+    sel.addEventListener("change", updatePreview);
+    $("tz-start").addEventListener("click", onStartClick);
+    updatePreview();
+  }
+  function updatePreview() {
+    var tz = $("tz-select").value;
+    var t = nextRolloverWith(Date.now(), dayFmt(tz));
+    var loc;
+    try { loc = new Date(t).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" }); }
+    catch (e) { loc = new Date(t).toString(); }
+    $("tz-preview").textContent = "Puzzles flip at midnight " + tz.replace(/_/g, " ") + " — next one " + loc + " your time.";
+  }
+  function onStartClick() {
+    if (pendingTz || config) return;
+    var tz = $("tz-select").value || "UTC";
+    pendingTz = tz;
+    var btn = $("tz-start"); btn.disabled = true; btn.textContent = "Starting…";
+    var day0 = dayNoWith(Date.now(), dayFmt(tz));        // today (in the chosen zone) is Daily #1
+    var seed = (Math.floor(Math.random() * 0x100000000)) >>> 0;   // this instance's own word order
+    var cfg = { type: "config", tz: tz, seed: seed, day0: day0, by: webxdc.selfAddr, ts: Date.now() };
+    webxdc.sendUpdate({
+      payload: cfg,
+      document: "#1",
+      summary: "Daily Word is set up — new word at midnight " + tz.replace(/_/g, " ")
+    }, "Daily Word started — resets at midnight " + tz.replace(/_/g, " "));
+    // safety: if our own update never echoes back, adopt locally
+    setTimeout(function () { if (!config) onConfig(cfg, 1 << 30); }, 4000);
+  }
+
+  // ----------------------------------------------------------------------
+  // boot
+  // ----------------------------------------------------------------------
+  webxdc.setUpdateListener(function (u) {
+    applyUpdate(u);
+    if (gameReady) {
+      if (activeTab === "overall") renderOverall();
+      else renderLeaderboard();
+    }
+  }, 0).then(function () {
+    replayDone = true;
+    if (config) startGame();   // a zone is already set — play
+    else showSetup();          // we're first — let this player choose the zone
+  });
+
+  setInterval(function () {
+    checkRollover();
+    if (gameReady && isToday() && !local.done && local.startedAt) renderTimer();
+  }, 250);
+
+  // ----------------------------------------------------------------------
+  // dev stub: only used when opened directly in a browser (no webxdc host)
+  // ----------------------------------------------------------------------
+  function makeStub() {
+    console.warn("[Daily Word] webxdc.js not found — using an in-memory dev stub.");
+    var listeners = [], updates = [];
+    var api = {
+      selfAddr: "you@dev",
+      selfName: "You",
+      sendUpdate: function (u) {
+        var rec = {
+          payload: u.payload, info: u.info, document: u.document, summary: u.summary,
+          serial: updates.length + 1, max_serial: updates.length + 1
+        };
+        updates.push(rec);
+        if (u.info) console.log("[info]", u.info);
+        if (u.document || u.summary) console.log("[doc]", u.document, "|", u.summary);
+        listeners.forEach(function (cb) { try { cb(rec); } catch (e) { console.error(e); } });
+      },
+      setUpdateListener: function (cb) {
+        listeners.push(cb);
+        updates.forEach(function (rec) { cb(rec); });
+        return Promise.resolve();
+      },
+      joinRealtimeChannel: function () {
+        return {
+          send: function (data) { console.log("[rt-send]", data && data.length, "bytes"); },
+          setListener: function () {},
+          leave: function () {}
+        };
+      }
+    };
+    try { window.webxdc = api; } catch (e) {}
+    return api;
+  }
+})();
+</script>
+</body>
+</html>
