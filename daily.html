@@ -319,6 +319,15 @@ body {
 .ov-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 .ov-pts { text-align: right; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--fg); }
 .ov-note { color: var(--muted); font-size: 12px; margin: 12px 8px 0; line-height: 1.5; }
+.seasonbar { display:flex; align-items:center; justify-content:center; gap:12px; margin:2px 0 12px; }
+.seasonbar .seasonnav { background:var(--bg); border:1px solid var(--line); color:var(--fg); width:30px; height:30px; border-radius:8px; font-size:16px; cursor:pointer; }
+.seasonbar .seasonnav:disabled { opacity:.35; cursor:default; }
+.seasonbar .seasonlbl { font-weight:700; font-size:14px; min-width:130px; text-align:center; color:var(--fg); }
+.votepanel { font-size:12px; color:var(--muted); margin-top:14px; text-align:center; }
+.votepanel.muted { font-style:italic; }
+.votepanel .voted { color:var(--accent); font-weight:700; }
+.votebtn { display:block; width:100%; margin-top:14px; padding:12px 14px; font-size:15px; font-weight:700; font-family:inherit; cursor:pointer; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+.votehint { font-size:11px; color:var(--muted); text-align:center; margin-top:6px; }
 
 /* ---- loading / waiting ---- */
 .waiting {
@@ -452,6 +461,7 @@ body.setup-mode #setup { display: flex !important; }
 
   <section id="overall" class="leaderboard">
     <h2 class="lb-title">Overall standings</h2>
+    <div class="seasonbar" id="season-bar" style="display:none"></div>
     <div id="ov-head" class="ov-head hidden">
       <span class="ov-rank">#</span>
       <span class="ov-name">Player</span>
@@ -462,6 +472,7 @@ body.setup-mode #setup { display: flex !important; }
       <span class="ov-num">Pts</span>
     </div>
     <ol id="ov-list" class="lb-list"></ol>
+    <div id="vote-panel"></div>
     <p id="ov-empty" class="lb-empty">No games finished yet.</p>
     <p id="tz-info" class="ov-note"></p>
     <p class="ov-note">
@@ -1191,6 +1202,10 @@ window.ANSWERS = [
   var pendingTz = null;       // tz we broadcast during setup, awaiting echo
 
   var results = {};           // dayNo -> { addr -> { name, tries, time, won, ts, pattern } }
+  var votes = {};             // votes[season] = { addr: true } — one-way "yes, reset"
+  var wipes = {};             // wipes[season] = { startDay, addr } — canonical boundary (min startDay)
+  var viewSeason = 0;         // which season the Overall tab is showing
+  var emittedWipe = {};       // seasons this device already broadcast a wipe for (this session)
   var gameReady = false;
   var replayDone = false;
 
@@ -1510,23 +1525,45 @@ window.ANSWERS = [
   // ----------------------------------------------------------------------
   // overall standings (aggregate across every day)
   // ----------------------------------------------------------------------
-  function currentStreak(addr) {
+  // ---- seasons (vote-to-reset) ----
+  // Players cast a one-way "reset" vote; once a strict majority of THIS season's
+  // players have voted, a `wipe` fixes the boundary at the next reset, the standings
+  // are archived, and a fresh Overall begins — derived from the shared vote/result/
+  // wipe log, so devices converge just like the scores do.
+  function currentSeason() { var s = 0; while (wipes[s]) s++; return s; }
+  function seasonStart(s) { var e = (epochDay == null ? 0 : epochDay); return s <= 0 ? e : (wipes[s - 1] ? wipes[s - 1].startDay : e); }
+  function seasonEnd(s) { return wipes[s] ? wipes[s].startDay : Infinity; }
+  function countKeys(o) { var n = 0; for (var k in o) n++; return n; }
+  function seasonElectorate(s) {
+    var a0 = seasonStart(s), a1 = seasonEnd(s), set = {};
+    Object.keys(results).forEach(function (dk) { var d = +dk; if (d >= a0 && d < a1) { var dm = results[dk]; for (var addr in dm) set[addr] = 1; } });
+    return set;
+  }
+  function seasonVoters(s) { var e = seasonElectorate(s), v = votes[s] || {}, out = {}; for (var a in v) if (e[a]) out[a] = 1; return out; }
+  function seasonNeeded(s) { return Math.floor(countKeys(seasonElectorate(s)) / 2) + 1; }
+  function seasonPassed(s) { var e = countKeys(seasonElectorate(s)); return e > 0 && countKeys(seasonVoters(s)) >= seasonNeeded(s); }
+  function recordVote(season, addr) { if (!votes[season]) votes[season] = {}; votes[season][addr] = true; }
+  function applyWipe(season, startDay, addr) {
+    var c = wipes[season];
+    if (!c || startDay < c.startDay || (startDay === c.startDay && addr < c.addr)) { wipes[season] = { startDay: startDay, addr: addr }; return true; }
+    return false;
+  }
+
+  function currentStreak(addr, a0, lastDay) {
+    if (a0 == null) a0 = -Infinity; if (lastDay == null) lastDay = Infinity;
     var maxDay = null;
-    Object.keys(results).forEach(function (dk) {
-      if (results[dk][addr]) { var d = +dk; if (maxDay === null || d > maxDay) maxDay = d; }
-    });
+    Object.keys(results).forEach(function (dk) { var d = +dk; if (d >= a0 && d <= lastDay && results[dk][addr]) { if (maxDay === null || d > maxDay) maxDay = d; } });
     if (maxDay === null) return 0;
     var s = 0, d = maxDay;
-    while (true) {
-      var dm = results[d], rr = dm && dm[addr];
-      if (rr && rr.won) { s++; d--; } else break;
-    }
+    while (d >= a0) { var dm = results[d], rr = dm && dm[addr]; if (rr && rr.won) { s++; d--; } else break; }
     return s;
   }
-  function overallStandings() {
+  function overallStandings(season) {
+    if (season == null) season = currentSeason();
+    var a0 = seasonStart(season), a1 = seasonEnd(season), lastDay = Math.min(todayNo, a1 - 1);
     var byAddr = {};
     Object.keys(results).forEach(function (dk) {
-      var day = +dk;
+      var day = +dk; if (day < a0 || day >= a1) return;
       var dm = results[dk];
       var dayLead = leaderForDay(day);
       Object.keys(dm).forEach(function (addr) {
@@ -1542,7 +1579,7 @@ window.ANSWERS = [
     });
     var arr = Object.keys(byAddr).map(function (a) {
       var s = byAddr[a];
-      s.streak = currentStreak(a);
+      s.streak = currentStreak(a, a0, lastDay);
       s.avg = s.wins ? (s.tries / s.wins) : 0;
       return s;
     });
@@ -1560,10 +1597,13 @@ window.ANSWERS = [
     if (info) info.textContent = config
       ? "🕛 New word every day at midnight " + (config.tz || "UTC").replace(/_/g, " ") + "."
       : "";
-    var arr = overallStandings();
+    var cs = currentSeason();
+    viewSeason = Math.max(0, Math.min(viewSeason, cs));
+    renderSeasonBar(cs);
+    var arr = overallStandings(viewSeason);
     $ovList.innerHTML = "";
     var head = $("ov-head");
-    if (!arr.length) { $ovEmpty.classList.remove("hidden"); if (head) head.classList.add("hidden"); return; }
+    if (!arr.length) { $ovEmpty.classList.remove("hidden"); if (head) head.classList.add("hidden"); renderVotePanel(cs); return; }
     $ovEmpty.classList.add("hidden");
     if (head) head.classList.remove("hidden");
     function cell(cls, txt) { var s = document.createElement("span"); s.className = cls; s.textContent = txt; return s; }
@@ -1579,6 +1619,56 @@ window.ANSWERS = [
       li.appendChild(cell("ov-pts", e.points));
       $ovList.appendChild(li);
     });
+    renderVotePanel(cs);
+  }
+  function renderSeasonBar(cs) {
+    var sb = $("season-bar");
+    if (cs > 0) {
+      sb.style.display = "";
+      sb.innerHTML = '<button class="seasonnav" id="season-prev"' + (viewSeason <= 0 ? " disabled" : "") + '>‹</button>' +
+        '<span class="seasonlbl">Season ' + (viewSeason + 1) + (viewSeason < cs ? ' · final' : '') + '</span>' +
+        '<button class="seasonnav" id="season-next"' + (viewSeason >= cs ? " disabled" : "") + '>›</button>';
+      var sp = $("season-prev"), sn = $("season-next");
+      if (sp) sp.onclick = function () { viewSeason--; renderOverall(); };
+      if (sn) sn.onclick = function () { viewSeason++; renderOverall(); };
+    } else { sb.style.display = "none"; sb.innerHTML = ""; }
+  }
+  function renderVotePanel(cs) {
+    var vp = $("vote-panel"), me = webxdc.selfAddr;
+    if (viewSeason !== cs) { vp.innerHTML = '<div class="votepanel muted">Season ' + (viewSeason + 1) + ' · final standings</div>'; return; }
+    var e = countKeys(seasonElectorate(cs)), v = countKeys(seasonVoters(cs)), need = seasonNeeded(cs);
+    var tally = '<b>' + v + '</b> of ' + e + ' · ' + need + ' needed';
+    if (!e) { vp.innerHTML = '<div class="votepanel muted">Play today to open voting for a new season.</div>'; return; }
+    if (!seasonElectorate(cs)[me]) { vp.innerHTML = '<div class="votepanel muted">Play this season to vote on a reset · ' + tally + '</div>'; return; }
+    if (votes[cs] && votes[cs][me]) { vp.innerHTML = '<div class="votepanel"><span class="voted">✓ You voted to reset</span> · ' + tally + '</div>'; return; }
+    vp.innerHTML = '<button class="votebtn" id="vote-btn">🔄 Vote to start a new season</button>' +
+      '<div class="votehint">Archives this season and starts a fresh Overall · ' + tally + '</div>';
+    var b = $("vote-btn"); if (b) b.onclick = function () { castVote(cs); };
+  }
+  function castVote(season) {
+    var addr = webxdc.selfAddr;
+    if (votes[season] && votes[season][addr]) return;
+    recordVote(season, addr);
+    var nm = webxdc.selfName || webxdc.selfAddr || "Player";
+    webxdc.sendUpdate({ payload: { type: "vote", season: season, addr: addr },
+      info: nm + " voted to start a new season of " + APP_NAME + " (" + countKeys(seasonVoters(season)) + "/" + countKeys(seasonElectorate(season)) + ")" }, "");
+    maybeWipe();
+    renderOverall();
+  }
+  // Emit a wipe once the live season reaches a majority (guarded against the boot
+  // replay via replayDone, and against firing twice).
+  function maybeWipe() {
+    if (!replayDone) return;
+    var s = currentSeason();
+    if (wipes[s] || emittedWipe[s] || !seasonPassed(s)) return;
+    emittedWipe[s] = true;
+    var startDay = (todayNo != null ? todayNo : (epochDay || 0)) + 1, addr = webxdc.selfAddr;
+    applyWipe(s, startDay, addr);
+    var champ = overallStandings(s)[0];
+    var text = "🔄 " + APP_NAME + " Season " + (s + 1) + " is over — a majority voted to reset. Season " + (s + 2) +
+      " starts at the next puzzle." + (champ ? " 🏆 " + champ.name + " won with " + champ.points + " pts." : "");
+    webxdc.sendUpdate({ payload: { type: "wipe", season: s, startDay: startDay, addr: addr }, info: text, notify: { "*": text }, summary: summaryText() }, "");
+    viewSeason = currentSeason();
   }
 
   // ----------------------------------------------------------------------
@@ -1658,6 +1748,8 @@ window.ANSWERS = [
     var p = u.payload;
     if (!p) return;
     if (p.type === "config") { onConfig(p, u.serial); return; }
+    if (p.type === "vote") { if (p.season != null && p.addr) { recordVote(p.season, p.addr); maybeWipe(); } return; }
+    if (p.type === "wipe") { if (p.season != null && applyWipe(p.season, p.startDay, p.addr) && viewSeason === p.season) viewSeason = currentSeason(); return; }
     if (p.type !== "result" || !p.addr) return;
     if (typeof p.day !== "number") return;
     var dm = results[p.day] || (results[p.day] = {});
@@ -1942,6 +2034,7 @@ window.ANSWERS = [
     }
   }, 0).then(function () {
     replayDone = true;
+    maybeWipe();               // replay done — emit a wipe if a majority is already in but no wipe landed
     if (config) startGame();   // a zone is already set — play
     else showSetup();          // we're first — let this player choose the zone
   });
