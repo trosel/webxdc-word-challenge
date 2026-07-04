@@ -1465,7 +1465,7 @@ window.ANSWERS = [
     arr.sort(function (a, b) {
       if (a.won !== b.won) return a.won ? -1 : 1;
       if (a.won) { if (a.tries !== b.tries) return a.tries - b.tries; if (a.time !== b.time) return a.time - b.time; }
-      return a.ts - b.ts;
+      return (a.ts - b.ts) || (a.addr < b.addr ? -1 : a.addr > b.addr ? 1 : 0);
     });
     return arr;
   }
@@ -1507,7 +1507,11 @@ window.ANSWERS = [
       li.className = "lb-item" + (e.addr === webxdc.selfAddr ? " me" : "") + (e.won ? "" : " lost");
       var main = document.createElement("div"); main.className = "lb-main";
       var rankCell = document.createElement("span"); rankCell.className = "lb-rank";
-      rankCell.textContent = e.won ? (MEDALS[idx] || (idx + 1) + ".") : "💀";
+      // Tie by performance: winners with identical guesses AND time share a medal
+      // (time still ranks otherwise). Losers get the skull.
+      var tier = 1;
+      if (e.won) { var seen = {}; arr.forEach(function (w) { if (w.won && (w.tries < e.tries || (w.tries === e.tries && w.time < e.time))) seen[w.tries + ":" + w.time] = 1; }); tier = 1 + Object.keys(seen).length; }
+      rankCell.textContent = e.won ? (MEDALS[tier - 1] || (tier + ".")) : "💀";
       var nameCell = document.createElement("span"); nameCell.className = "lb-name";
       nameCell.textContent = e.name + (e.addr === webxdc.selfAddr ? " (you)" : "");
       var triesCell = document.createElement("span"); triesCell.className = "lb-tries";
