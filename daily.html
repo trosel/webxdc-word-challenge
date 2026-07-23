@@ -1588,9 +1588,12 @@ window.ANSWERS = [
       return s;
     });
     arr.sort(function (a, b) {
-      if (a.points !== b.points) return b.points - a.points;
+      // Rank by AVERAGE points per game (not total), so someone who skips days but
+      // plays well still places on merit. Ties: more games, golds, fewer guesses, time.
+      var pa = a.points / a.games, pb = b.points / b.games;
+      if (pa !== pb) return pb - pa;
+      if (a.games !== b.games) return b.games - a.games;
       if (a.golds !== b.golds) return b.golds - a.golds;
-      if (a.wins !== b.wins) return b.wins - a.wins;
       if (a.tries !== b.tries) return a.tries - b.tries;   // fewer guesses across wins
       return a.time - b.time;
     });
