@@ -44,7 +44,7 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; padding: 0; height: 100%; }
+html, body { margin: 0; padding: 0; height: 100%; touch-action: manipulation; overscroll-behavior: none; }
 body {
   background: var(--bg);
   color: var(--fg);
@@ -80,8 +80,6 @@ body {
   min-width: 48px;
   text-align: right;
 }
-.timer.running { color: var(--accent); }
-
 /* ---- day navigation ---- */
 .daynav {
   display: flex;
@@ -138,6 +136,7 @@ body {
   user-select: none;
   color: var(--fg);
   background: transparent;
+  transition: transform 0.13s ease-in;
 }
 @media (max-height: 700px) { .tile { width: 48px; height: 48px; font-size: 24px; } }
 @media (max-width: 340px) { .tile { width: 48px; height: 48px; font-size: 24px; } }
@@ -147,6 +146,17 @@ body {
 .tile.present { background: var(--present); border-color: var(--present); color: #fff; }
 .tile.absent  { background: var(--absent);  border-color: var(--absent);  color: #fff; }
 @keyframes pop { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
+/* flip reveal: JS adds .flip (tile rotates edge-on), then swaps in the colour
+   class and removes .flip so it rotates back — one tile after another. */
+.tile.flip { transform: rotateX(90deg); }
+/* win celebration: little staggered bounce across the winning row */
+.tile.dance { animation: dance 0.6s ease; }
+@keyframes dance {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-12px); }
+  55% { transform: translateY(4px); }
+  75% { transform: translateY(-2px); }
+}
 .row.shake { animation: shake 0.5s; }
 @keyframes shake {
   10%, 90% { transform: translateX(-1px); }
@@ -171,7 +181,9 @@ body {
   pointer-events: none;
   max-width: 90%;
   text-align: center;
+  animation: toast-in 0.2s ease;
 }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, -6px); } }
 
 /* ---- banner ---- */
 .banner {
@@ -181,7 +193,9 @@ body {
   background: var(--banner-bg);
   font-size: 15px;
   text-align: center;
+  animation: rise 0.35s ease;
 }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 .banner strong { font-weight: 800; }
 .banner.win { background: var(--banner-bg); border: 1px solid var(--correct); }
 .banner.lose { background: var(--banner-bg); border: 1px solid var(--line); }
@@ -204,9 +218,12 @@ body {
   text-transform: uppercase;
   cursor: pointer;
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
   font-family: inherit;
+  transition: transform 0.06s ease, background-color 0.25s ease, color 0.25s ease;
 }
-.key:active { filter: brightness(0.9); }
+.key:active { filter: brightness(0.9); transform: scale(0.92); }
 .key-wide { flex: 1.6; font-size: 11px; }
 .key.correct { background: var(--correct); color: #fff; }
 .key.present { background: var(--present); color: #fff; }
@@ -410,7 +427,7 @@ body.setup-mode #setup { display: flex !important; }
     <div class="title">
       <span id="game-name">Daily Word</span><span id="challenge-no"></span>
     </div>
-    <div id="timer" class="timer">0:00</div>
+    <div id="timer" class="timer"></div>
   </header>
 
   <div id="daynav" class="daynav">
@@ -1395,12 +1412,11 @@ window.ANSWERS = [
     if (!isToday()) {
       var r = myResult(viewedDay);
       $timer.textContent = (r && r.won) ? fmtTime(r.time) : "—";
-      $timer.classList.remove("running");
       return;
     }
-    if (local.done) { $timer.textContent = fmtTime(elapsed()); $timer.classList.remove("running"); return; }
-    if (local.startedAt) { $timer.textContent = fmtTime(Date.now() - local.startedAt); $timer.classList.add("running"); }
-    else { $timer.textContent = "0:00"; $timer.classList.remove("running"); }
+    // No live clock while guessing — the time is still tracked underneath for
+    // the leaderboard, but it only appears once you've finished.
+    $timer.textContent = local.done ? fmtTime(elapsed()) : "";
   }
 
   function renderBannerAndKeys() {
@@ -1835,14 +1851,43 @@ window.ANSWERS = [
   }
 
   function handleKey(key) {
-    if (!gameReady || !isToday() || local.done) return;
+    if (!gameReady || !isToday() || local.done || revealing) return;
     if (key === "ENTER") return submitGuess();
     if (key === "BACK") { if (current.length) { current = current.slice(0, -1); renderBoard(); } return; }
     if (/^[A-Z]$/.test(key) && current.length < COLS) {
-      if (!local.startedAt) { local.startedAt = Date.now(); saveLocal(); renderTimer(); }
+      if (!local.startedAt) { local.startedAt = Date.now(); saveLocal(); }
       current += key;
       renderBoard();
     }
+  }
+
+  // Reveal a submitted guess Wordle-style: each tile flips edge-on in turn and
+  // takes its colour at the midpoint of the flip. Input is ignored until the
+  // whole row has been revealed (`revealing`).
+  var revealing = false;
+  var FLIP_STEP = 240, FLIP_MS = 260;
+  function animateReveal(rowIdx, then) {
+    revealing = true;
+    var sc = scoreGuess(local.guesses[rowIdx]);
+    for (var c = 0; c < COLS; c++) (function (c) {
+      var t = tiles[rowIdx][c];
+      t.className = "tile filled";
+      setTimeout(function () { t.classList.add("flip"); }, c * FLIP_STEP);
+      setTimeout(function () {
+        t.classList.remove("flip");
+        t.classList.add(sc[c]);
+      }, c * FLIP_STEP + FLIP_MS / 2);
+    })(c);
+    setTimeout(function () { revealing = false; if (then) then(); },
+      (COLS - 1) * FLIP_STEP + FLIP_MS + 80);
+  }
+  function danceRow(rowIdx) {
+    for (var c = 0; c < COLS; c++) (function (c) {
+      var t = tiles[rowIdx][c];
+      t.style.animationDelay = (c * 80) + "ms";
+      t.classList.add("dance");
+      setTimeout(function () { t.classList.remove("dance"); t.style.animationDelay = ""; }, 700 + c * 80);
+    })(c);
   }
 
   var PRAISE = ["Genius!", "Magnificent!", "Impressive!", "Splendid!", "Great!", "Phew!"];
@@ -1857,10 +1902,17 @@ window.ANSWERS = [
     var lost = !won && local.guesses.length >= ROWS;
     if (won || lost) { local.done = true; local.won = won; local.endedAt = Date.now(); }
     saveLocal();
-    renderBoard(); renderKeyboard(); renderTimer(); renderBannerAndKeys();
-    if (won) toast(PRAISE[Math.min(local.guesses.length - 1, PRAISE.length - 1)], 2400);
-    else if (lost) toast(ANSWER, 3000);
-    if (local.done) { broadcastResult(); renderLeaderboard(); }
+    var rowIdx = local.guesses.length - 1;
+    animateReveal(rowIdx, function () {
+      renderBoard(); renderKeyboard(); renderTimer(); renderBannerAndKeys();
+      if (won) {
+        danceRow(rowIdx);
+        toast(PRAISE[Math.min(local.guesses.length - 1, PRAISE.length - 1)], 2400);
+      } else if (lost) {
+        toast(ANSWER, 3000);
+      }
+      if (local.done) { broadcastResult(); renderLeaderboard(); }
+    });
   }
 
   // ----------------------------------------------------------------------
@@ -2046,10 +2098,7 @@ window.ANSWERS = [
     else showSetup();          // we're first — let this player choose the zone
   });
 
-  setInterval(function () {
-    checkRollover();
-    if (gameReady && isToday() && !local.done && local.startedAt) renderTimer();
-  }, 250);
+  setInterval(checkRollover, 250);
 
   // ----------------------------------------------------------------------
   // dev stub: only used when opened directly in a browser (no webxdc host)
